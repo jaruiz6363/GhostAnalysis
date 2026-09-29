@@ -32,6 +32,24 @@ public sealed class Sensor
     /// <summary>Full height along the field's plane (y), in lens units; null for no edge.</summary>
     public double? Height { get; init; }
 
+    /// <summary>
+    /// The image circle's radius, in lens units, when no width and height are given: the height
+    /// the lens images its full field to. Null for no such bound. Light landing outside it is not
+    /// on the sensor, and a ghost reflecting from the sensor begins only inside it.
+    /// </summary>
+    public double? Radius { get; init; }
+
+    /// <summary>Whether the bound is the image circle, taken from the lens, rather than a size given.</summary>
+    public bool IsImageCircle => Radius.HasValue && !Width.HasValue && !Height.HasValue;
+
+    /// <summary>This sensor, bounded by the image circle of the given radius, its grating unchanged.</summary>
+    public Sensor WithImageCircle(double radius) => new()
+    {
+        Width = Width, Height = Height, Radius = radius, PeriodX = PeriodX, PeriodY = PeriodY,
+        FillFactor = FillFactor, Efficiencies = Efficiencies, MaxOrder = MaxOrder,
+        MinimumEfficiency = MinimumEfficiency, FieldAngle = FieldAngle,
+    };
+
     /// <summary>Grating period across (x), in micrometres; null for a sensor that does not diffract.</summary>
     public double? PeriodX { get; init; }
 
@@ -99,6 +117,7 @@ public sealed class Sensor
             double t = double.PositiveInfinity;
             if (Width is double w && Math.Abs(d.X) > 1e-12) t = Math.Min(t, 0.5 * w / Math.Abs(d.X));
             if (Height is double h && Math.Abs(d.Y) > 1e-12) t = Math.Min(t, 0.5 * h / Math.Abs(d.Y));
+            if (Radius is double r) t = Math.Min(t, r);
             return t;
         }
     }
@@ -113,7 +132,7 @@ public sealed class Sensor
             double a => a.ToString("0.###", CultureInfo.InvariantCulture) + " degrees from the height",
         };
 
-    public bool Bounded => Width.HasValue || Height.HasValue;
+    public bool Bounded => Width.HasValue || Height.HasValue || Radius.HasValue;
 
     public bool Diffracts => PeriodX.HasValue || PeriodY.HasValue;
 
@@ -124,7 +143,8 @@ public sealed class Sensor
     public bool Covers(double x, double y)
     {
         var (across, along) = ToSensor(x, y);
-        return (!Width.HasValue || Math.Abs(across) <= 0.5 * Width.Value) && (!Height.HasValue || Math.Abs(along) <= 0.5 * Height.Value);
+        return (!Width.HasValue || Math.Abs(across) <= 0.5 * Width.Value) && (!Height.HasValue || Math.Abs(along) <= 0.5 * Height.Value)
+            && (!Radius.HasValue || x * x + y * y <= Radius.Value * Radius.Value * (1 + 1e-12));
     }
 
     /// <summary>

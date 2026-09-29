@@ -90,16 +90,18 @@ public static class GhostDrawing
             if (line.Count > 1) own.Add(line);
         }
 
-        // Each surface's aperture, for the glass: its own, or where it has none the beam's.
+        // Each surface's aperture, for the glass: the one the analysis stopped the rays at - the
+        // file's, or the lens's own beam's where the file gives none - so no ray the analysis
+        // passes is drawn outside the glass. Only a surface nothing sizes falls back to the beam here.
         var sd = new double[lens.Surfaces.Count];
         for (int i = 1; i <= lastLens; i++)
-            sd[i] = lens.Surfaces[i].SemiDiameter > 0 ? lens.Surfaces[i].SemiDiameter
+            sd[i] = r.Apertures[i] > 0 ? r.Apertures[i]
                   : 1.1 * Math.Max(Math.Abs(r.Nominal.Y[i]), own.SelectMany(l => l).Where(p => Math.Abs(p.Z - z[i]) < 1e-6).Select(p => Math.Abs(p.Y)).DefaultIfEmpty(0).Max());
 
         // The sensor, and where the ghost comes to a focus.
         // Without a size given, the sensor is drawn to the image of the largest field analysed, and
         // never smaller than a third of the lens: an on-axis drawing's rays all land at the centre.
-        double reach = r.Options.Sensor.HalfExtentAlongField;
+        double reach = r.Sensor.HalfExtentAlongField;
         double sensorHalf = double.IsFinite(reach) ? reach
             : Math.Max(g.Fields.Select(f => Math.Abs(f.ImageHeight)).Where(double.IsFinite).DefaultIfEmpty(0).Max(),
                        sd.Max() / 3.0);
@@ -131,7 +133,7 @@ public static class GhostDrawing
         sb.AppendLine(F($"<rect width=\"{width}\" height=\"{height}\" fill=\"white\"/>"));
 
         string unit = lens.FieldType == FieldType.ObjectAngle ? "°" : "";
-        string along = r.Options.Sensor.Bounded || r.Options.Sensor.Diffracts ? " along " + r.Options.Sensor.FieldDirectionText : "";
+        string along = (r.Sensor.Bounded && !r.Sensor.IsImageCircle) || r.Sensor.Diffracts ? " along " + r.Sensor.FieldDirectionText : "";
         string title = (rank > 0 ? $"#{rank}: " : "") + g.Name + F($" at field {h:0.###}{unit}") + along + (string.IsNullOrWhiteSpace(lens.Title) ? "" : " - " + lens.Title);
         sb.AppendLine(F($"<text x=\"{width / 2}\" y=\"20\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"bold\">{Esc(title)}</text>"));
 
@@ -161,7 +163,7 @@ public static class GhostDrawing
         int stop = lens.StopSurfaceIndex;
         if (stop >= 1 && stop <= lastLens)
         {
-            double r0 = (lens.Surfaces[stop].SemiDiameter > 0 ? lens.Surfaces[stop].SemiDiameter : Math.Abs(r.Nominal.Y[stop])) * scale;
+            double r0 = (r.Apertures[stop] > 0 ? r.Apertures[stop] : Math.Abs(r.Nominal.Y[stop])) * scale;
             double sx = X(z[stop]);
             sb.AppendLine(F($"<line x1=\"{sx:F1}\" y1=\"{centerY - r0 - 6:F1}\" x2=\"{sx:F1}\" y2=\"{centerY - r0:F1}\" stroke=\"black\" stroke-width=\"1.5\"/>"));
             sb.AppendLine(F($"<line x1=\"{sx:F1}\" y1=\"{centerY + r0:F1}\" x2=\"{sx:F1}\" y2=\"{centerY + r0 + 6:F1}\" stroke=\"black\" stroke-width=\"1.5\"/>"));

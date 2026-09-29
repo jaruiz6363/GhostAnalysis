@@ -57,7 +57,18 @@ The method is Abd El-Maksoud and Sasian's paraxial ghost analysis:
    wherever that falls between the fields of the sweep.
 
 10. **The sensor's size.** Given one (`--sensor 36x24`), light landing off it is not seen, and a
-    ghost that reflects from the sensor reflects only where the sensor is. The fields run along
+    ghost that reflects from the sensor reflects only where the sensor is. Given none, the sensor
+    is the lens's image circle - where its real chief ray of the largest field lands - so light
+    beyond what the lens images still does not count.
+    **Where the glass ends.** A lens file that gives no semi-diameters is treated as a lens that
+    has them: each surface gets the aperture needed to pass the lens's full beam at every field
+    up to the largest it specifies - the largest height its real rays reach there, around the
+    whole pupil - as a design program sizes a surface it is not told the size of. Nothing inside
+    the lens's field is vignetted; beyond it, and for ghost light that strays outside the lens's
+    own beam, those are the edges of the glass, so a ghost cannot reflect from a surface's sphere
+    beyond the lens, or pass outside its edge. The stop keeps the size that sets the lens's
+    F-number. The report says which surfaces were sized this way, and the drawings draw the glass
+    to the same apertures. The fields run along
     its height unless `--field-direction` says its width, its diagonal, or an angle: the lens is
     rotationally symmetric, so the direction changes nothing in it, only where the sensor's
     edges cut the field's plane and which way the grating's orders turn the light.

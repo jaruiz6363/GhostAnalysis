@@ -84,6 +84,22 @@ public sealed class GhostResult
     /// <summary>The lens's own indices after each surface, at <see cref="Wavelength"/>.</summary>
     public required IReadOnlyList<double> NominalIndices { get; init; }
 
+    /// <summary>
+    /// Each lens surface's clear semi-diameter as the analysis used it: the file's, or where the
+    /// file gives none, the lens's own beam's (see <see cref="ApertureComputed"/>). 0 for the object
+    /// and the image.
+    /// </summary>
+    public required IReadOnlyList<double> Apertures { get; init; }
+
+    /// <summary>Which of <see cref="Apertures"/> were computed from the lens's beam, the file giving none.</summary>
+    public required IReadOnlyList<bool> ApertureComputed { get; init; }
+
+    /// <summary>
+    /// The sensor as the analysis used it: the one given, or, given no size, bounded by the lens's
+    /// image circle.
+    /// </summary>
+    public required Sensor Sensor { get; init; }
+
     /// <summary>Each surface's reflectance, indexed like the lens (0 for the object).</summary>
     public required IReadOnlyList<double> Reflectance { get; init; }
 
@@ -138,7 +154,8 @@ public static class GhostAnalyzer
     private sealed record Context(
         OpticalSystem Lens, GhostOptions Options, double Wavelength,
         int Stop, double StopSd, bool Infinite, double NominalRay, double[] Reflectance,
-        IReadOnlyList<double> Fields, double ReferenceField, double ImageAtReference);
+        IReadOnlyList<double> Fields, double ReferenceField, double ImageAtReference,
+        double[] Apertures, Sensor Sensor);
 
     public static GhostResult Analyze(OpticalSystem lens, GlassCatalog catalog, GhostOptions? options = null)
     {
@@ -179,8 +196,22 @@ public static class GhostAnalyzer
             catch (InvalidOperationException) { }
         }
 
+        // Where the glass ends, and where the sensor does. A file that gives no semi-diameter for a
+        // surface does not mean the surface is endless: its reflections, and the rays through it,
+        // stop where the lens's own beam needs it to stop. A sensor given no size is the image
+        // circle: light landing beyond what the lens images is not on the sensor.
+        var (apertures, computed) = Apertures(lens, n, nominal);
+        apertures[stop] = stopSd;
+        computed[stop] = false;
+        var sensor = options.Sensor;
+        if (!sensor.Bounded)
+        {
+            double circle = ImageCircle(lens, n, nominal);
+            if (circle > 0) sensor = sensor.WithImageCircle(circle);
+        }
+
         var context = new Context(lens, options, wave, stop, stopSd, infinite, nominalRay, reflectance,
-                                  fields, reference, imageAtReference);
+                                  fields, reference, imageAtReference, apertures, sensor);
 
         // The layouts and their indices first, in turn - the catalogs are the one shared thing -
         // then each ghost's traces, which touch nothing but its own layout, side by side. A ghost
@@ -218,6 +249,9 @@ public static class GhostAnalyzer
             Wavelength = wave,
             Nominal = nominal,
             NominalIndices = n,
+            Apertures = apertures,
+            ApertureComputed = computed,
+            Sensor = sensor,
             Reflectance = reflectance,
             Fields = fields,
             Ghosts = ghosts,
@@ -253,9 +287,7 @@ public static class GhostAnalyzer
         // reflecting, is taken to catch the whole beam.
         var sd = new double[sys.Surfaces.Count];
         for (int j = 1; j < last; j++)
-            sd[j] = layout.Origin[j] == c.Stop ? c.StopSd
-                  : layout.Origin[j] == image ? 0.0
-                  : Math.Max(0.0, sys.Surfaces[j].SemiDiameter);
+            sd[j] = layout.Origin[j] == image ? 0.0 : c.Apertures[layout.Origin[j]];
 
         // The potential marginal ray: from the axial object point, unit height at surface 1
         // (unit slope from a finite object). Where the stop is marked does not change it.
@@ -354,7 +386,7 @@ public static class GhostAnalyzer
         // Real rays through this ghost: stopped by its apertures and the sensor's edges, and turned
         // into its orders at the sensor.
         var onSensor = Enumerable.Range(0, sys.Surfaces.Count).Select(j => layout.Reflects[j] && layout.Origin[j] == image).ToArray();
-        var tracer = new GhostTracer(sys, n, p, sd, ghostStop, onSensor, c.Options.Sensor, w.Kicks);
+        var tracer = new GhostTracer(sys, n, p, sd, ghostStop, onSensor, c.Sensor, w.Kicks);
 
         // Paraxially an order is a kick to the ray's slope at the sensor, which carries on through
         // the rest of the ghost to a fixed displacement on the sensor, whatever the field.
@@ -608,6 +640,70 @@ public static class GhostAnalyzer
         double effective = Math.Max(Math.Sqrt(2.0) * rms, airy / Math.Sqrt(transmitted));
         double lit = effective > 0 ? power * transmitted / (Math.PI * effective * effective) : double.PositiveInfinity;
         return new SpotResult(transmitted, cx, cy, rms, max, effective, lit);
+    }
+
+    /// <summary>
+    /// Each surface's clear semi-diameter: the file's where it gives one; otherwise the aperture
+    /// the lens needs to pass its own full beam at every field up to the largest it specifies -
+    /// the largest height any ray of that beam reaches there, around the whole rim of the pupil -
+    /// which is how a design program sizes a surface it is not told the size of. Nothing inside
+    /// the lens's field is vignetted by these; beyond it, and for ghost light that strays outside
+    /// the lens's own beam, they are the edges of the glass. 0 where neither says: the object, the
+    /// image, a surface no ray reaches.
+    /// </summary>
+    public static (double[] Apertures, bool[] Computed) Apertures(OpticalSystem lens, double[] n, ParaxialResult nominal)
+    {
+        int count = lens.Surfaces.Count, last = count - 2;
+        var aperture = new double[count];
+        var computed = new bool[count];
+        var envelope = new double[count];
+
+        // The lens's fields and the steps between them, its largest always among them; and the
+        // pupil's rim, finely enough that no rim ray between two samples reaches further than they do
+        // by more than a part in ten thousand.
+        double top = lens.Fields.Count == 0 ? 0.0 : lens.Fields.Max(f => Math.Abs(f.Y));
+        var fields = top > 0
+            ? Enumerable.Range(0, 11).Select(i => top * i / 10.0).Concat(lens.Fields.Select(f => Math.Abs(f.Y))).Distinct().ToList()
+            : new List<double> { 0.0 };
+        const int rim = 64;
+        var pupil = new List<(double Py, double Px)>();
+        for (int k = 0; k < rim; k++) pupil.Add((Math.Cos(2 * Math.PI * k / rim), Math.Sin(2 * Math.PI * k / rim)));
+        pupil.Add((0.0, 0.0));
+        foreach (double h in fields)
+            foreach (var (py, px) in pupil)
+            {
+                RealRayTrace.SurfaceHit[] hits;
+                try { hits = RealRayTrace.TraceRecord(lens, n, nominal, h, py, px, atParaxialFocus: false); }
+                catch (InvalidOperationException) { continue; }
+                for (int i = 1; i <= last; i++)
+                {
+                    if (!hits[i].Ok) break;
+                    envelope[i] = Math.Max(envelope[i], Math.Sqrt(hits[i].X * hits[i].X + hits[i].Y * hits[i].Y));
+                }
+            }
+
+        // A rim ray between two samples reaches at most 1 - cos(π / rim) further than they do: the
+        // aperture is opened by that, so no ray of the beam is clipped, and by no more.
+        double between = 1.0 + (1.0 - Math.Cos(Math.PI / rim));
+        for (int i = 1; i <= last; i++)
+        {
+            if (lens.Surfaces[i].SemiDiameter > 0) aperture[i] = lens.Surfaces[i].SemiDiameter;
+            else if (envelope[i] > 0) { aperture[i] = envelope[i] * between; computed[i] = true; }
+        }
+        return (aperture, computed);
+    }
+
+    /// <summary>The image circle: where the lens's real chief ray of its largest field lands. 0 for a lens with no field.</summary>
+    public static double ImageCircle(OpticalSystem lens, double[] n, ParaxialResult nominal)
+    {
+        double top = lens.Fields.Count == 0 ? 0.0 : lens.Fields.Max(f => Math.Abs(f.Y));
+        if (top <= 0) return 0.0;
+        try
+        {
+            var end = RealRayTrace.TraceRecord(lens, n, nominal, top, 0.0, 0.0, atParaxialFocus: false)[^1];
+            return end.Ok ? Math.Sqrt(end.X * end.X + end.Y * end.Y) : 0.0;
+        }
+        catch (InvalidOperationException) { return 0.0; }
     }
 
     /// <summary>The fields to analyse: those asked for, or a sweep from the axis past the lens's largest.</summary>

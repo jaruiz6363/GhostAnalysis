@@ -48,12 +48,18 @@ public static class Report
         sb.AppendLine(r.Options.ImageReflects
             ? F($"Sensor:            surface {image}, R = {r.Options.ImageReflectance:0.####} (a setting: no lens file gives it)")
             : "Sensor:            not reflecting");
-        var sensor = r.Options.Sensor;
-        if (r.Options.ImageReflects || sensor.Bounded)
-            sb.AppendLine(sensor.Bounded
-                ? F($"Sensor size:       {(sensor.Width.HasValue ? $"{sensor.Width:0.###}" : "unbounded")} wide x {(sensor.Height.HasValue ? $"{sensor.Height:0.###}" : "unbounded")} high, centred")
-                : "Sensor size:       no edge (every ray reaching the image plane counts)");
-        if (sensor.Bounded || sensor.Diffracts)
+        var sensor = r.Sensor;
+        if (sensor.IsImageCircle)
+            sb.AppendLine(F($"Sensor size:       the image circle, radius {sensor.Radius:0.###} (no size given: --sensor WxH sets one)"));
+        else if (sensor.Bounded)
+            sb.AppendLine(F($"Sensor size:       {(sensor.Width.HasValue ? $"{sensor.Width:0.###}" : "unbounded")} wide x {(sensor.Height.HasValue ? $"{sensor.Height:0.###}" : "unbounded")} high, centred"));
+        else
+            sb.AppendLine("Sensor size:       no edge (the lens has no field to size it by; every ray reaching the image plane counts)");
+        var computed = Enumerable.Range(0, r.ApertureComputed.Count).Where(i => r.ApertureComputed[i]).ToList();
+        sb.AppendLine(computed.Count == 0
+            ? "Apertures:         the lens file's semi-diameters"
+            : $"Apertures:         the file gives none for surface{(computed.Count > 1 ? "s" : "")} {string.Join(", ", computed)}: sized to the lens's own beam, its full pupil over its fields");
+        if ((sensor.Bounded && !sensor.IsImageCircle) || sensor.Diffracts)
             sb.AppendLine(double.IsFinite(sensor.HalfExtentAlongField)
                 ? F($"Field direction:   along {sensor.FieldDirectionText}; the sensor's edge {sensor.HalfExtentAlongField:0.###} from its centre that way")
                 : $"Field direction:   along {sensor.FieldDirectionText}");
