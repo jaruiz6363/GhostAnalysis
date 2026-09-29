@@ -97,7 +97,16 @@ public sealed class GhostTracer
     /// arrive. Clipping, it is stopped outside any semi-diameter, and on the image plane outside
     /// the sensor - where it lands, and where it reflects from it.
     /// </summary>
-    public RealRayTrace.SurfaceHit? Trace(double field, double py, double px, bool clip)
+    public RealRayTrace.SurfaceHit? Trace(double field, double py, double px, bool clip) =>
+        Trace(field, py, px, clip, null);
+
+    /// <summary>
+    /// <see cref="Trace(double, double, double, bool)"/>, reporting every surface the ray meets on
+    /// the way, by its index in the layout, with where it met it in that surface's own frame -
+    /// the one that stops it included, so a drawing can show where the light is lost.
+    /// </summary>
+    public RealRayTrace.SurfaceHit? Trace(double field, double py, double px, bool clip,
+                                          Action<int, RealRayTrace.SurfaceHit>? visit)
     {
         RealRayTrace.SurfaceHit end = default;
         double x = 0, y = 0, z = 0, l = 0, m = 0, nz = 0;
@@ -131,6 +140,7 @@ public sealed class GhostTracer
                 var h = hits[i];
                 if (!h.Ok) return null;
                 int j = seg.Offset + i;
+                visit?.Invoke(j, h);
                 bool image = lastSegment && i == hits.Length - 1;
                 if (!clip) continue;
                 if (image || _onSensor[j])

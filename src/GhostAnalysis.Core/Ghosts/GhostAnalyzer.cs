@@ -62,6 +62,9 @@ public sealed class GhostResult
     /// <summary>The lens's own paraxial trace.</summary>
     public required ParaxialResult Nominal { get; init; }
 
+    /// <summary>The lens's own indices after each surface, at <see cref="Wavelength"/>.</summary>
+    public required IReadOnlyList<double> NominalIndices { get; init; }
+
     /// <summary>Each surface's reflectance, indexed like the lens (0 for the object).</summary>
     public required IReadOnlyList<double> Reflectance { get; init; }
 
@@ -195,6 +198,7 @@ public static class GhostAnalyzer
             Options = options,
             Wavelength = wave,
             Nominal = nominal,
+            NominalIndices = n,
             Reflectance = reflectance,
             Fields = fields,
             Ghosts = ghosts,
@@ -377,6 +381,7 @@ public static class GhostAnalyzer
         {
             Layout = layout,
             Paraxial = p,
+            Tracer = tracer,
             StopRatios = ratios,
             StopLayoutSurface = ghostStop,
             Anomalous = layout.Origin[ghostStop] != c.Stop,

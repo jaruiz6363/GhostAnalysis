@@ -30,6 +30,9 @@ public sealed class Ghost
     /// <summary>The paraxial trace of the ghost's layout, with its own stop and aperture.</summary>
     public required ParaxialResult Paraxial { get; init; }
 
+    /// <summary>Real rays through the ghost, stopped as its apertures and the sensor stop them, in its orders.</summary>
+    public required GhostTracer Tracer { get; init; }
+
     // ── Its stop ─────────────────────────────────────────────────────────────────
 
     /// <summary>

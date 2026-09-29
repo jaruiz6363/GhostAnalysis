@@ -28,6 +28,10 @@ public static class Program
         "  --pupil <n>                   rays across each ghost's pupil (default 21)\n" +
         "  --paraxial                    no real rays: the papers' paraxial analysis only\n" +
         "  --detail <n>                  show the n brightest ghosts field by field (default 5)\n" +
+        "  --layouts [n]                 draw the n brightest ghosts in the lens (default 5): an SVG\n" +
+        "                                each, and one HTML page with them all\n" +
+        "  --layout-dir <dir>            where to write them (default: beside -o, or here)\n" +
+        "  --layout-field <f>            draw them all at this field (default: each at its brightest)\n" +
         "\n" +
         "The sensor:\n" +
         "  --sensor <W>x<H>              its size, in lens units (mm): width across the field's plane,\n" +
@@ -54,7 +58,9 @@ public static class Program
             bool noSensor = false, paraxial = false;
             List<double>? fields = null;
             double extent = 1.2;
-            int steps = 12, pupil = 21, detail = 5;
+            int steps = 12, pupil = 21, detail = 5, layouts = 0;
+            string? layoutDir = null;
+            double? layoutField = null;
             double? width = null, height = null, periodX = null, periodY = null;
             double fill = 0.5, minEfficiency = 1e-3;
             int maxOrder = 2;
@@ -86,6 +92,13 @@ public static class Program
                     case "--pupil": pupil = int.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--paraxial": paraxial = true; break;
                     case "--detail": detail = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--layouts":
+                        // The count is optional: a number next, or 5.
+                        layouts = i + 1 < args.Length && int.TryParse(args[i + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int count)
+                            ? int.Parse(args[++i], CultureInfo.InvariantCulture) : 5;
+                        break;
+                    case "--layout-dir": layoutDir = Next(); break;
+                    case "--layout-field": layoutField = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--sensor": (width, height) = Pair(Next()); break;
                     case "--sensor-period": (periodX, periodY) = Pair(Next()); break;
                     case "--fill": fill = double.Parse(Next(), CultureInfo.InvariantCulture); break;
@@ -125,6 +138,7 @@ public static class Program
                 File.WriteAllText(output, report);
                 Console.WriteLine($"Written: {output}");
             }
+            if (layouts > 0) WriteLayouts(result, input, layoutDir ?? Path.GetDirectoryName(Path.GetFullPath(output ?? "x")) ?? ".", layouts, layoutField);
             return 0;
         }
         catch (Exception e) when (e is ArgumentException or FormatException or IOException or NotSupportedException or InvalidOperationException)
@@ -132,5 +146,27 @@ public static class Program
             Console.Error.WriteLine($"Error: {e.Message}");
             return 1;
         }
+    }
+
+    /// <summary>The brightest ghosts drawn in the lens: an SVG each, and a page with them all.</summary>
+    private static void WriteLayouts(GhostResult result, string input, string dir, int count, double? field)
+    {
+        Directory.CreateDirectory(dir);
+        string stem = Path.GetFileNameWithoutExtension(input);
+        // At a field given, the ghosts brightest there - at the nearest field analysed; a ghost
+        // bright elsewhere may be wholly vignetted at it. Otherwise the brightest at their worst.
+        var ghosts = (field is double f
+            ? result.Ghosts.OrderByDescending(g => g.Fields.MinBy(x => Math.Abs(x.Field - f))?.Brightness ?? 0.0)
+            : result.Ranked).Take(count).ToList();
+        for (int i = 0; i < ghosts.Count; i++)
+        {
+            string name = new string(ghosts[i].Name.Select(ch => char.IsLetterOrDigit(ch) || ch is '+' or '-' or '(' or ')' ? ch : ch == ',' ? '-' : '_').ToArray());
+            string file = Path.Combine(dir, $"{stem}_ghost{i + 1}_{name}.svg");
+            File.WriteAllText(file, GhostDrawing.Svg(result, ghosts[i], i + 1, field));
+            Console.WriteLine($"Written: {file}");
+        }
+        string page = Path.Combine(dir, $"{stem}_ghosts.html");
+        File.WriteAllText(page, GhostDrawing.Page(result, ghosts, field));
+        Console.WriteLine($"Written: {page}");
     }
 }

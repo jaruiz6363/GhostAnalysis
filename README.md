@@ -69,6 +69,13 @@ The method is Abd El-Maksoud and Sasian's paraxial ghost analysis:
     normalised over the orders that propagate - f = 1 is a mirror. A measured table can be
     given instead (`--order-table`, lines of `m, n, efficiency`).
 
+12. **Drawings.** `--layouts` draws the brightest ghosts in the lens, each at its worst field:
+    the lens in section, and a fan of the ghost's real rays folded back into it - in, back after
+    the first reflection, forward after the second, each leg in its own colour - with the
+    reflecting surfaces in red, the ghost's focus marked, the lens's own rays faintly behind,
+    and any ray the ghost's apertures or the sensor stop drawn faintly to where it is stopped.
+    The drawing of the lens is ported from LensHH-LT's layout renderer.
+
 The fields are swept from the axis to 1.2 times the lens's largest field - a bright source just
 outside the picture still sends its ghosts into it - and each ghost is ranked by its worst field.
 
@@ -110,6 +117,9 @@ ghost -i lens.len --no-sensor -n 4
 | `--pupil n` | real rays across each ghost's pupil (default 21) |
 | `--paraxial` | no real rays: the papers' paraxial analysis only |
 | `--detail n` | show the n brightest ghosts field by field (default 5) |
+| `--layouts [n]` | draw the n brightest ghosts in the lens (default 5): an SVG each, and one HTML page |
+| `--layout-dir dir` | where to write them (default: beside `-o`, or the current folder) |
+| `--layout-field f` | draw at this field the ghosts brightest there (default: each at its brightest) |
 | `--sensor WxH` | the sensor's size, in lens units: width across the field's plane, height along it |
 | `--sensor-period P[xQ]` | its grating period in micrometres; the sensor then diffracts |
 | `--fill f` | each pixel's reflecting aperture as a fraction of the period (default 0.5) |
