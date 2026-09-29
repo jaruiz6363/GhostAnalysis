@@ -34,8 +34,10 @@ public static class Program
         "  --layout-field <f>            draw them all at this field (default: each at its brightest)\n" +
         "\n" +
         "The sensor:\n" +
-        "  --sensor <W>x<H>              its size, in lens units (mm): width across the field's plane,\n" +
-        "                                height along it. Light off it is not seen, nor reflected.\n" +
+        "  --sensor <W>x<H>              its size, in lens units (mm), width by height.\n" +
+        "                                Light off it is not seen, nor reflected.\n" +
+        "  --field-direction <d>         which way the fields run on the sensor: height (default),\n" +
+        "                                width, diagonal, or an angle in degrees from the height\n" +
         "  --sensor-period <P>[x<Q>]     its grating period, in micrometres: the pixel pitch, or for a\n" +
         "                                Bayer colour sensor twice it. The sensor then diffracts.\n" +
         "  --fill <f>                    each pixel's reflecting aperture as a fraction of the period,\n" +
@@ -63,6 +65,7 @@ public static class Program
             double? layoutField = null;
             double? width = null, height = null, periodX = null, periodY = null;
             double fill = 0.5, minEfficiency = 1e-3;
+            double? fieldAngle = 0.0;
             int maxOrder = 2;
             Dictionary<(int, int), double>? table = null;
             (double, double) Pair(string text)
@@ -102,6 +105,18 @@ public static class Program
                     case "--sensor": (width, height) = Pair(Next()); break;
                     case "--sensor-period": (periodX, periodY) = Pair(Next()); break;
                     case "--fill": fill = double.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--field-direction":
+                        string direction = Next().ToLowerInvariant();
+                        fieldAngle = direction switch
+                        {
+                            "height" or "vertical" => 0.0,
+                            "width" or "horizontal" => 90.0,
+                            "diagonal" => null,
+                            _ => double.TryParse(direction, NumberStyles.Float, CultureInfo.InvariantCulture, out double deg)
+                                ? deg
+                                : throw new ArgumentException($"'{direction}' is not a field direction: height, width, diagonal, or degrees from the height."),
+                        };
+                        break;
                     case "--order-table": table = Sensor.ReadEfficiencies(Next()); break;
                     case "--orders": maxOrder = int.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--min-efficiency": minEfficiency = double.Parse(Next(), CultureInfo.InvariantCulture); break;
@@ -127,7 +142,7 @@ public static class Program
                 RealRays = !paraxial,
                 Sensor = new Sensor
                 {
-                    Width = width, Height = height, PeriodX = periodX, PeriodY = periodY,
+                    Width = width, Height = height, PeriodX = periodX, PeriodY = periodY, FieldAngle = fieldAngle,
                     FillFactor = fill, Efficiencies = table, MaxOrder = maxOrder, MinimumEfficiency = minEfficiency,
                 },
             });
@@ -135,6 +150,8 @@ public static class Program
             Console.Write(report);
             if (output != null)
             {
+                string? folder = Path.GetDirectoryName(Path.GetFullPath(output));
+                if (folder != null) Directory.CreateDirectory(folder);
                 File.WriteAllText(output, report);
                 Console.WriteLine($"Written: {output}");
             }

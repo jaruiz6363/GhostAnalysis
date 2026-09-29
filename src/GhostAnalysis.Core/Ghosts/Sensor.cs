@@ -53,6 +53,66 @@ public sealed class Sensor
     /// <summary>Orders, and combinations of them, carrying less than this fraction of the reflected light are left out.</summary>
     public double MinimumEfficiency { get; init; } = 1e-3;
 
+    /// <summary>
+    /// The direction the fields are swept in on the sensor, as an angle in degrees from its height
+    /// towards its width: 0 along the height, 90 along the width. Null for the diagonal, to the
+    /// sensor's corner (45 degrees for a sensor without a size).
+    ///
+    /// <para>The lens is rotationally symmetric, so the direction changes nothing in it: the
+    /// field's plane is always traced as the meridian (y). What it changes is how that plane lies
+    /// on the sensor - where the sensor's edges cut it, and which way the grating's orders turn
+    /// the light - and both are worked by rotating between the two frames.</para>
+    /// </summary>
+    public double? FieldAngle { get; init; } = 0.0;
+
+    /// <summary>The field direction, as an angle in radians from the sensor's height towards its width.</summary>
+    private double Angle =>
+        FieldAngle is double a ? a * Math.PI / 180.0
+        : Width is double w && Height is double h ? Math.Atan2(w, h) : Math.PI / 4;
+
+    /// <summary>
+    /// The field's plane in the sensor's frame: <c>D</c> the direction the fields run (the traced
+    /// y), <c>E</c> the one across it (the traced x), each as (across the width, along the height).
+    /// </summary>
+    private ((double X, double Y) D, (double X, double Y) E) Frame
+    {
+        get
+        {
+            double a = Angle;
+            return ((Math.Sin(a), Math.Cos(a)), (Math.Cos(a), -Math.Sin(a)));
+        }
+    }
+
+    /// <summary>A point of the traced frame - x across the field's plane, y along it - in the sensor's: across its width, along its height.</summary>
+    public (double Across, double Along) ToSensor(double x, double y)
+    {
+        var (d, e) = Frame;
+        return (x * e.X + y * d.X, x * e.Y + y * d.Y);
+    }
+
+    /// <summary>How far the sensor reaches from its centre along the field's direction; infinite without a size.</summary>
+    public double HalfExtentAlongField
+    {
+        get
+        {
+            var (d, _) = Frame;
+            double t = double.PositiveInfinity;
+            if (Width is double w && Math.Abs(d.X) > 1e-12) t = Math.Min(t, 0.5 * w / Math.Abs(d.X));
+            if (Height is double h && Math.Abs(d.Y) > 1e-12) t = Math.Min(t, 0.5 * h / Math.Abs(d.Y));
+            return t;
+        }
+    }
+
+    /// <summary>The field direction in words, for a report.</summary>
+    public string FieldDirectionText =>
+        FieldAngle switch
+        {
+            null => "the diagonal",
+            0.0 => "the height",
+            90.0 => "the width",
+            double a => a.ToString("0.###", CultureInfo.InvariantCulture) + " degrees from the height",
+        };
+
     public bool Bounded => Width.HasValue || Height.HasValue;
 
     public bool Diffracts => PeriodX.HasValue || PeriodY.HasValue;
@@ -60,13 +120,26 @@ public sealed class Sensor
     private double Lx => PeriodX ?? PeriodY ?? double.PositiveInfinity;
     private double Ly => PeriodY ?? PeriodX ?? double.PositiveInfinity;
 
-    /// <summary>Whether a point of the image plane is on the sensor.</summary>
-    public bool Covers(double x, double y) =>
-        (!Width.HasValue || Math.Abs(x) <= 0.5 * Width.Value) && (!Height.HasValue || Math.Abs(y) <= 0.5 * Height.Value);
+    /// <summary>Whether a point of the image plane, in the traced frame, is on the sensor.</summary>
+    public bool Covers(double x, double y)
+    {
+        var (across, along) = ToSensor(x, y);
+        return (!Width.HasValue || Math.Abs(across) <= 0.5 * Width.Value) && (!Height.HasValue || Math.Abs(along) <= 0.5 * Height.Value);
+    }
 
-    /// <summary>The change order (m, n) makes to a reflected ray's direction cosines, in a medium of index <paramref name="n"/>.</summary>
-    public (double L, double M) Kick(int m, int n, double lambdaUm, double medium) =>
-        (m == 0 ? 0.0 : m * lambdaUm / (Math.Abs(medium) * Lx), n == 0 ? 0.0 : n * lambdaUm / (Math.Abs(medium) * Ly));
+    /// <summary>
+    /// The change order (m, n) makes to a reflected ray's direction cosines, in a medium of index
+    /// <paramref name="medium"/>: m along the sensor's width, n along its height, turned into the
+    /// traced frame.
+    /// </summary>
+    public (double L, double M) Kick(int m, int n, double lambdaUm, double medium)
+    {
+        double across = m == 0 ? 0.0 : m * lambdaUm / (Math.Abs(medium) * Lx);
+        double along = n == 0 ? 0.0 : n * lambdaUm / (Math.Abs(medium) * Ly);
+        if (across == 0.0 && along == 0.0) return (0.0, 0.0);
+        var (d, e) = Frame;
+        return (across * e.X + along * e.Y, across * d.X + along * d.Y);
+    }
 
     /// <summary>
     /// The orders analysed and the fraction of the sensor's reflected light each carries: every

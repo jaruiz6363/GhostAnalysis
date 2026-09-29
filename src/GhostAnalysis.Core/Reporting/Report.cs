@@ -37,8 +37,12 @@ public static class Report
         var sensor = r.Options.Sensor;
         if (r.Options.ImageReflects || sensor.Bounded)
             sb.AppendLine(sensor.Bounded
-                ? F($"Sensor size:       {(sensor.Width.HasValue ? $"{sensor.Width:0.###}" : "unbounded")} across x {(sensor.Height.HasValue ? $"{sensor.Height:0.###}" : "unbounded")} along the field, centred")
+                ? F($"Sensor size:       {(sensor.Width.HasValue ? $"{sensor.Width:0.###}" : "unbounded")} wide x {(sensor.Height.HasValue ? $"{sensor.Height:0.###}" : "unbounded")} high, centred")
                 : "Sensor size:       no edge (every ray reaching the image plane counts)");
+        if (sensor.Bounded || sensor.Diffracts)
+            sb.AppendLine(double.IsFinite(sensor.HalfExtentAlongField)
+                ? F($"Field direction:   along {sensor.FieldDirectionText}; the sensor's edge {sensor.HalfExtentAlongField:0.###} from its centre that way")
+                : $"Field direction:   along {sensor.FieldDirectionText}");
         if (sensor.Diffracts)
         {
             var orders = sensor.Orders(r.Wavelength, 1.0);

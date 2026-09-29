@@ -99,7 +99,8 @@ public static class GhostDrawing
         // The sensor, and where the ghost comes to a focus.
         // Without a size given, the sensor is drawn to the image of the largest field analysed, and
         // never smaller than a third of the lens: an on-axis drawing's rays all land at the centre.
-        double sensorHalf = r.Options.Sensor.Height is double sh ? 0.5 * sh
+        double reach = r.Options.Sensor.HalfExtentAlongField;
+        double sensorHalf = double.IsFinite(reach) ? reach
             : Math.Max(g.Fields.Select(f => Math.Abs(f.ImageHeight)).Where(double.IsFinite).DefaultIfEmpty(0).Max(),
                        sd.Max() / 3.0);
         double focusZ = z[lastLens] + g.ImageDistance;
@@ -130,7 +131,8 @@ public static class GhostDrawing
         sb.AppendLine(F($"<rect width=\"{width}\" height=\"{height}\" fill=\"white\"/>"));
 
         string unit = lens.FieldType == FieldType.ObjectAngle ? "°" : "";
-        string title = (rank > 0 ? $"#{rank}: " : "") + g.Name + F($" at field {h:0.###}{unit}") + (string.IsNullOrWhiteSpace(lens.Title) ? "" : " - " + lens.Title);
+        string along = r.Options.Sensor.Bounded || r.Options.Sensor.Diffracts ? " along " + r.Options.Sensor.FieldDirectionText : "";
+        string title = (rank > 0 ? $"#{rank}: " : "") + g.Name + F($" at field {h:0.###}{unit}") + along + (string.IsNullOrWhiteSpace(lens.Title) ? "" : " - " + lens.Title);
         sb.AppendLine(F($"<text x=\"{width / 2}\" y=\"20\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"bold\">{Esc(title)}</text>"));
 
         // The axis.
@@ -183,7 +185,7 @@ public static class GhostDrawing
             sb.AppendLine(F($"<circle cx=\"{ix:F1}\" cy=\"{iy:F1}\" r=\"2.5\" fill=\"none\" stroke=\"#888\" stroke-width=\"1\"/>"));
             sb.AppendLine(F($"<text x=\"{ix + 6:F1}\" y=\"{iy + 3:F1}\" font-size=\"10\" fill=\"#888\">image</text>"));
         }
-        bool imageOff = imageY is double iy1 && r.Options.Sensor.Height is double hh && Math.Abs(iy1) > 0.5 * hh;
+        bool imageOff = imageY is double iy1 && double.IsFinite(reach) && Math.Abs(iy1) > reach;
 
         // The ghost's rays: those that reach the sensor strong, those stopped faint, ending in a cross.
         foreach (var ray in fan)
@@ -212,7 +214,7 @@ public static class GhostDrawing
         }
 
         Panels(sb, r, g, h, fan, width, sensorReflects, focusShown,
-               imageOff ? F($"The lens's image ({Math.Abs(imageY!.Value):0.##}) is off the sensor (half-height {0.5 * r.Options.Sensor.Height!.Value:0.##})") : null);
+               imageOff ? F($"The lens's image ({Math.Abs(imageY!.Value):0.##}) is off the sensor (edge at {reach:0.##})") : null);
         ScaleBar(sb, scale, width, height, marginY, track, r.Wavelength);
         sb.AppendLine("</svg>");
         return sb.ToString();

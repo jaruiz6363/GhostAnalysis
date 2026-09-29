@@ -57,7 +57,10 @@ The method is Abd El-Maksoud and Sasian's paraxial ghost analysis:
    wherever that falls between the fields of the sweep.
 
 10. **The sensor's size.** Given one (`--sensor 36x24`), light landing off it is not seen, and a
-    ghost that reflects from the sensor reflects only where the sensor is.
+    ghost that reflects from the sensor reflects only where the sensor is. The fields run along
+    its height unless `--field-direction` says its width, its diagonal, or an angle: the lens is
+    rotationally symmetric, so the direction changes nothing in it, only where the sensor's
+    edges cut the field's plane and which way the grating's orders turn the light.
 11. **The sensor's diffraction.** Its pixels repeat, so it is a reflective grating: each
     reflection from it sends light into orders (m, n), turned by the grating equation
     L' = L + mλ/Λx, M' = M + nλ/Λy, each a copy of the ghost displaced on the sensor. Given its
@@ -120,7 +123,8 @@ ghost -i lens.len --no-sensor -n 4
 | `--layouts [n]` | draw the n brightest ghosts in the lens (default 5): an SVG each, and one HTML page |
 | `--layout-dir dir` | where to write them (default: beside `-o`, or the current folder) |
 | `--layout-field f` | draw at this field the ghosts brightest there (default: each at its brightest) |
-| `--sensor WxH` | the sensor's size, in lens units: width across the field's plane, height along it |
+| `--sensor WxH` | the sensor's size, in lens units, width by height |
+| `--field-direction d` | which way the fields run on the sensor: `height` (default), `width`, `diagonal`, or degrees from the height |
 | `--sensor-period P[xQ]` | its grating period in micrometres; the sensor then diffracts |
 | `--fill f` | each pixel's reflecting aperture as a fraction of the period (default 0.5) |
 | `--order-table file` | measured order efficiencies instead: lines of `m, n, efficiency` |
@@ -135,8 +139,7 @@ axis unless `--fields` is given.
 - More than one wavelength.
 - Image surfaces beyond third order, from AberrationCalculator's fifth- and seventh-order
   coefficients.
-- Fields off the meridian: the sweep runs along the sensor's height; a diagonal or a
-  two-dimensional map of the sensor is not yet traced.
+- A two-dimensional map of the sensor: each sweep runs along one direction across it.
 
 ## Building
 
