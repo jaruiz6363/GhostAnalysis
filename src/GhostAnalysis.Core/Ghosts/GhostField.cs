@@ -22,6 +22,12 @@ public sealed class GhostField
     /// <summary>Centre of the ghost's disc on the sensor: the ghost chief ray's height there, ȳ'_g,n.</summary>
     public required double ParaxialCenter { get; init; }
 
+    /// <summary>
+    /// Centre of the ghost's disc across the field's plane: zero, but for a diffraction order with
+    /// m ≠ 0, which the sensor's grating throws sideways.
+    /// </summary>
+    public double ParaxialCenterX { get; init; }
+
     /// <summary>Radius of the ghost's disc on the sensor, |y'_g,n|. The same at every field.</summary>
     public required double ParaxialRadius { get; init; }
 
@@ -40,7 +46,10 @@ public sealed class GhostField
     /// <summary>Whether real rays were traced. False when the analysis was paraxial only.</summary>
     public required bool Traced { get; init; }
 
-    /// <summary>Fraction of the rays launched that reached the sensor, none vignetted or lost.</summary>
+    /// <summary>
+    /// Fraction of the rays launched that reached the sensor, none vignetted, lost, or landing -
+    /// or, for a sensor ghost, reflecting - off the sensor's edges.
+    /// </summary>
     public double Transmitted { get; init; }
 
     /// <summary>Centroid of the ghost's real spot on the sensor.</summary>

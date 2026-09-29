@@ -34,6 +34,20 @@ public static class Report
         sb.AppendLine(r.Options.ImageReflects
             ? F($"Sensor:            surface {image}, R = {r.Options.ImageReflectance:0.####} (a setting: no lens file gives it)")
             : "Sensor:            not reflecting");
+        var sensor = r.Options.Sensor;
+        if (r.Options.ImageReflects || sensor.Bounded)
+            sb.AppendLine(sensor.Bounded
+                ? F($"Sensor size:       {(sensor.Width.HasValue ? $"{sensor.Width:0.###}" : "unbounded")} across x {(sensor.Height.HasValue ? $"{sensor.Height:0.###}" : "unbounded")} along the field, centred")
+                : "Sensor size:       no edge (every ray reaching the image plane counts)");
+        if (sensor.Diffracts)
+        {
+            var orders = sensor.Orders(r.Wavelength, 1.0);
+            sb.AppendLine(F($"Sensor grating:    period {sensor.PeriodX ?? sensor.PeriodY:0.###} x {sensor.PeriodY ?? sensor.PeriodX:0.###} um, orders to ±{sensor.MaxOrder}, ") +
+                          (sensor.Efficiencies != null ? "measured efficiencies" : F($"efficiencies sinc² with fill {sensor.FillFactor:0.###}")));
+            sb.AppendLine("  Orders analysed, and the share of the sensor's reflected light in each:");
+            foreach (var chunk in orders.Chunk(6))
+                sb.AppendLine("    " + string.Join("  ", chunk.Select(o => F($"{Sensor.Label(o.M, o.N),-8} {o.Efficiency:0.0000}"))));
+        }
         sb.AppendLine(F($"Power entering:    {r.Options.InputPower:G4}, the same at every field"));
         sb.AppendLine($"Fields:            {string.Join(", ", r.Fields.Select(f => f.ToString("0.###", C)))} {unit}");
         sb.AppendLine(traced
@@ -49,16 +63,19 @@ public static class Report
         sb.AppendLine();
 
         sb.AppendLine($"{r.Ghosts.Count} ghosts, brightest at their worst field first:");
-        sb.AppendLine("  Ghost          Peak irrad.   at field   on sensor      Radius    Axis irrad.       ΔZ     Mag   Stop");
+        int wide = Math.Max(12, r.Ghosts.Count == 0 ? 12 : r.Ghosts.Max(g => g.Name.Length));
+        sb.AppendLine($"  {"Ghost".PadRight(wide)}  Peak irrad.   at field     x on sensor y      Radius    Axis irrad.       ΔZ     Mag   Stop");
         foreach (var g in r.Ranked)
         {
             var p = g.Peak;
             double rad = p == null ? Math.Abs(g.MarginalAtImage) : p.Traced && p.Transmitted > 0 ? p.EffectiveRadius : p.ParaxialRadius;
-            sb.AppendLine(F($"  {g.Name,-12} {g.PeakIrradiance,12:0.000E+00} {p?.Field ?? 0,10:0.###} {p?.Position ?? 0,11:0.0000} {rad,11:0.0000} {g.Irradiance,14:0.000E+00} {g.DeltaZ,9:0.000} {g.Magnification,7:0.000}   {g.StopSurface}{(g.Anomalous ? " *" : "")}"));
+            double x = p == null ? 0.0 : p.Traced && p.Transmitted > 0 ? p.CentroidX : p.ParaxialCenterX;
+            sb.AppendLine(F($"  {g.Name.PadRight(wide)} {g.PeakIrradiance,12:0.000E+00} {p?.Field ?? 0,10:0.###} {x,9:0.0000} {p?.Position ?? 0,9:0.0000} {rad,11:0.0000} {g.Irradiance,14:0.000E+00} {g.DeltaZ,9:0.000} {g.Magnification,7:0.000}   {g.StopSurface}{(g.Anomalous ? " *" : "")}"));
         }
-        sb.AppendLine("  Peak irradiance at the field where the ghost is brightest, landing 'on sensor' there with that");
-        sb.AppendLine("  radius; Axis irrad. and ΔZ on axis, paraxially; Mag is where the ghost lands as a multiple of");
-        sb.AppendLine("  the image height (-1: mirrored through the centre). * stopped by a surface other than the lens's stop.");
+        sb.AppendLine("  Peak irradiance at the field where the ghost is brightest, landing at x, y on the sensor there");
+        sb.AppendLine("  with that radius; Axis irrad. and ΔZ on axis, paraxially; Mag is where the ghost lands as a multiple");
+        sb.AppendLine("  of the image height (-1: mirrored through the centre). * stopped by a surface other than the lens's");
+        sb.AppendLine("  stop. A ghost reflecting from a diffracting sensor carries its order there, (m,n).");
         sb.AppendLine();
 
         // The ghosts that come into focus on the sensor somewhere off axis. A third-order prediction
@@ -87,7 +104,7 @@ public static class Report
                     double.IsFinite(Near(g.PredictedTangentialCrossing)) ? F($"T {g.PredictedTangentialCrossing:0.###}") : null,
                     double.IsFinite(Near(g.PredictedSagittalCrossing)) ? F($"S {g.PredictedSagittalCrossing:0.###}") : null,
                 }.Where(x => x != null));
-                sb.AppendLine($"  {g.Name,-12}   {real,-38} {(predicted.Length == 0 ? "none" : predicted)}");
+                sb.AppendLine($"  {g.Name.PadRight(wide)}   {real,-38} {(predicted.Length == 0 ? "none" : predicted)}");
             }
             sb.AppendLine($"  Fields in {unit}. Real: where the real foci either side of the ghost's chief ray reach the");
             sb.AppendLine("  sensor; (vignetted) where none of the ghost's light gets there. Third order: where the");
@@ -131,10 +148,11 @@ public static class Report
             sb.AppendLine();
         }
 
+        // An order shares its ghost's first order; each ghost is listed once.
         sb.AppendLine("First order of each ghost:");
         sb.AppendLine("  Ghost             f_E        BFD         d'     y'_g,n       D_ep      L'_g    L'_g,n      D_xp       f/#");
-        foreach (var g in r.Ghosts)
-            sb.AppendLine(F($"  {g.Name,-12} {g.Efl,10:0.0000} {g.Bfd,10:0.0000} {g.RearPrincipalPlane,10:0.0000} {g.MarginalAtImage,10:0.0000} {g.EntrancePupilDiameter,10:0.0000} {g.ExitPupilToGhostImage,9:0.0000} {g.ExitPupilToImage,9:0.0000} {g.ExitPupilDiameter,9:0.0000} {g.FNumber,9:0.0000}"));
+        foreach (var g in r.Ghosts.Where(x => x.Orders.All(o => o == (0, 0))).GroupBy(x => x.Path.ToString()).Select(x => x.First()))
+            sb.AppendLine(F($"  {g.Path,-12} {g.Efl,10:0.0000} {g.Bfd,10:0.0000} {g.RearPrincipalPlane,10:0.0000} {g.MarginalAtImage,10:0.0000} {g.EntrancePupilDiameter,10:0.0000} {g.ExitPupilToGhostImage,9:0.0000} {g.ExitPupilToImage,9:0.0000} {g.ExitPupilDiameter,9:0.0000} {g.FNumber,9:0.0000}"));
         sb.AppendLine();
         sb.AppendLine("  BFD and d' from the last surface; ΔZ from the ghost's image to the lens's, positive when the");
         sb.AppendLine("  ghost focuses short of it; L' from the ghost's exit pupil to the ghost's image (L'_g) and to the");

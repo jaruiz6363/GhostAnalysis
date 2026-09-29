@@ -13,7 +13,19 @@ public sealed class Ghost
 {
     public required GhostLayout Layout { get; init; }
     public GhostPath Path => Layout.Path;
-    public string Name => Path.ToString();
+
+    /// <summary>The ghost's name: its reflections, and its diffraction order at each reflection from the sensor.</summary>
+    public string Name => Path + (Orders.Count == 0 ? "" : " " + string.Concat(Orders.Select(o => Sensor.Label(o.M, o.N))));
+
+    /// <summary>
+    /// The diffraction order (m, n) the ghost takes at each of its reflections from the sensor,
+    /// in the order the light meets them; empty when the sensor does not diffract or the ghost
+    /// does not reflect from it.
+    /// </summary>
+    public IReadOnlyList<(int M, int N)> Orders { get; init; } = Array.Empty<(int, int)>();
+
+    /// <summary>The share of the sensor's reflected light that goes into those orders; 1 without any.</summary>
+    public double OrderEfficiency { get; init; } = 1.0;
 
     /// <summary>The paraxial trace of the ghost's layout, with its own stop and aperture.</summary>
     public required ParaxialResult Paraxial { get; init; }

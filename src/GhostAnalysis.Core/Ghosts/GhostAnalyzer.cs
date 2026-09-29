@@ -47,6 +47,9 @@ public sealed class GhostOptions
 
     /// <summary>Rays across the pupil's diameter; the grid inside the pupil is traced.</summary>
     public int PupilSamples { get; init; } = 21;
+
+    /// <summary>The sensor's size and grating. By default it has no edge and does not diffract.</summary>
+    public Sensor Sensor { get; init; } = new();
 }
 
 /// <summary>Every ghost of one lens, analysed at one wavelength.</summary>
@@ -74,7 +77,13 @@ public sealed class GhostResult
     /// <summary>The ghosts, brightest at their worst field first.</summary>
     public IEnumerable<Ghost> Ranked => Ghosts.OrderByDescending(g => g.PeakIrradiance);
 
-    public Ghost? Find(params int[] surfaces) => Ghosts.FirstOrDefault(g => g.Path.Surfaces.SequenceEqual(surfaces));
+    /// <summary>The ghost that reflects from these surfaces - in its zeroth order, if the sensor diffracts.</summary>
+    public Ghost? Find(params int[] surfaces) =>
+        Ghosts.FirstOrDefault(g => g.Path.Surfaces.SequenceEqual(surfaces) && g.Orders.All(o => o == (0, 0)));
+
+    /// <summary>The ghost that reflects from these surfaces, in these orders at its reflections from the sensor.</summary>
+    public Ghost? Find(int[] surfaces, params (int M, int N)[] orders) =>
+        Ghosts.FirstOrDefault(g => g.Path.Surfaces.SequenceEqual(surfaces) && g.Orders.SequenceEqual(orders));
 }
 
 /// <summary>
@@ -152,17 +161,33 @@ public static class GhostAnalyzer
                                   fields, reference, imageAtReference);
 
         // The layouts and their indices first, in turn - the catalogs are the one shared thing -
-        // then each ghost's traces, which touch nothing but its own layout, side by side.
-        var work = new List<(GhostLayout Layout, double[] N)>();
+        // then each ghost's traces, which touch nothing but its own layout, side by side. A ghost
+        // that reflects from a diffracting sensor is one ghost per order there, each with a layout
+        // of its own, since the analysis marks its stop on it.
+        var work = new List<Work>();
         foreach (var path in GhostPath.Enumerate(image - 1, options.Reflections, options.ImageReflects))
         {
             // A surface with no index step - a dummy, a stop in air - sends nothing back.
             if (path.Surfaces.Any(k => reflectance[k] <= 0.0)) continue;
             var layout = GhostLayout.Build(lens, path);
-            work.Add((layout, IndexResolver.Build(layout.System, catalog, wave)));
+            var gn = IndexResolver.Build(layout.System, catalog, wave);
+            var onSensor = Enumerable.Range(0, layout.Origin.Count).Where(j => layout.Reflects[j] && layout.Origin[j] == image).ToList();
+            if (onSensor.Count == 0 || !options.Sensor.Diffracts)
+            {
+                work.Add(new Work(layout, gn, Array.Empty<(int, int)>(), Array.Empty<(double, double)>(), 1.0));
+                continue;
+            }
+            var orders = options.Sensor.Orders(wave, gn[onSensor[0]]);
+            foreach (var combo in Combinations(orders, onSensor.Count))
+            {
+                double efficiency = combo.Aggregate(1.0, (e, o) => e * o.Efficiency);
+                if (efficiency < options.Sensor.MinimumEfficiency) continue;
+                var kicks = combo.Select((o, k) => options.Sensor.Kick(o.M, o.N, wave, gn[onSensor[k]])).ToArray();
+                work.Add(new Work(GhostLayout.Build(lens, path), gn, combo.Select(o => (o.M, o.N)).ToArray(), kicks, efficiency));
+            }
         }
         var ghosts = new Ghost[work.Count];
-        Parallel.For(0, work.Count, i => ghosts[i] = Analyze(context, work[i].Layout, work[i].N));
+        Parallel.For(0, work.Count, i => ghosts[i] = Analyze(context, work[i]));
 
         return new GhostResult
         {
@@ -177,9 +202,25 @@ public static class GhostAnalyzer
         };
     }
 
-    private static Ghost Analyze(Context c, GhostLayout layout, double[] n)
+    /// <summary>One ghost to analyse: its layout, indices, and its orders and their kicks at the sensor.</summary>
+    private sealed record Work(GhostLayout Layout, double[] N, (int M, int N)[] Orders,
+                               (double L, double M)[] Kicks, double Efficiency);
+
+    /// <summary>Every way of choosing one order at each of <paramref name="count"/> reflections from the sensor.</summary>
+    private static IEnumerable<(int M, int N, double Efficiency)[]> Combinations(
+        IReadOnlyList<(int M, int N, double Efficiency)> orders, int count)
+    {
+        if (count == 0) { yield return Array.Empty<(int, int, double)>(); yield break; }
+        foreach (var rest in Combinations(orders, count - 1))
+            foreach (var o in orders)
+                yield return rest.Append(o).ToArray();
+    }
+
+    private static Ghost Analyze(Context c, Work w)
     {
         var lens = c.Lens;
+        var layout = w.Layout;
+        var n = w.N;
         var sys = layout.System;
         int last = sys.Surfaces.Count - 1;
         int image = lens.Surfaces.Count - 1;
@@ -228,7 +269,8 @@ public static class GhostAnalyzer
         double rearFocal = Math.Abs(phi) > 1e-300 ? Math.Abs(n[last - 1]) / phi : double.PositiveInfinity;
         double xp = p.ExitPupilFromLastSurface;
 
-        double t = 1.0;
+        // Of the sensor's reflected light, the share that goes into these orders.
+        double t = w.Efficiency;
         for (int j = 1; j < last; j++)
         {
             double r = c.Reflectance[layout.Origin[j]];
@@ -286,12 +328,30 @@ public static class GhostAnalyzer
         // And, because those foci speak only for the middle of the beam - a fast, aberrated ghost
         // can have its chief ray's focus on the sensor and its spot no smaller for it - a fine scan
         // of the real spot itself over field, for where the ghost is really brightest.
+        // Real rays through this ghost: stopped by its apertures and the sensor's edges, and turned
+        // into its orders at the sensor.
+        var onSensor = Enumerable.Range(0, sys.Surfaces.Count).Select(j => layout.Reflects[j] && layout.Origin[j] == image).ToArray();
+        var tracer = new GhostTracer(sys, n, p, sd, ghostStop, onSensor, c.Options.Sensor, w.Kicks);
+
+        // Paraxially an order is a kick to the ray's slope at the sensor, which carries on through
+        // the rest of the ghost to a fixed displacement on the sensor, whatever the field.
+        double shiftX = 0.0, shiftY = 0.0;
+        var sensorHits = Enumerable.Range(0, onSensor.Length).Where(j => onSensor[j]).ToList();
+        for (int k = 0; k < w.Kicks.Length && k < sensorHits.Count; k++)
+        {
+            int j = sensorHits[k];
+            double carry = Carry(sys, p, j);
+            // The paraxial slope is M/N, and N, after the reflection, runs the way the index's sign does.
+            shiftX += carry * w.Kicks[k].L * Math.Sign(p.N[j]);
+            shiftY += carry * w.Kicks[k].M * Math.Sign(p.N[j]);
+        }
+
         var crossings = new List<(double Field, string Kind)>();
         var extra = new List<(double Field, string? Kind)>();
         double top = c.Fields.Count == 0 ? 0.0 : c.Fields.Max();
         if (c.Options.RealRays && top > 0)
         {
-            crossings.AddRange(RealCrossings(sys, n, p, 0.0, top));
+            crossings.AddRange(tracer.Crossings(0.0, top));
             extra.AddRange(crossings.Select(x => (x.Field, (string?)x.Kind)));
 
             const int scan = 120;
@@ -299,7 +359,7 @@ public static class GhostAnalyzer
             for (int i = 0; i <= scan; i++)
             {
                 double h = top * i / scan;
-                double e = Spot(sys, n, p, sd, ghostStop, h, power, airy, 11).Irradiance;
+                double e = Spot(tracer, h, power, airy, 11, finest: 47).Irradiance;
                 if (e > best) { best = e; bestField = h; }
             }
             if (best > 0 && !c.Fields.Contains(bestField)) extra.Add((bestField, "P"));
@@ -310,7 +370,8 @@ public static class GhostAnalyzer
                                 .OrderBy(x => x.Field);
         var fields = new List<GhostField>();
         foreach (var (h, kind) in fieldList)
-            fields.Add(AtField(c, layout, n, p, off, sd, ghostStop, h, power, radius, airy, deltaZ, sagT, sagS, kind));
+            fields.Add(AtField(c, layout, tracer, p, off, sd, ghostStop, h, power, radius, airy, deltaZ, sagT, sagS,
+                               shiftX, shiftY, kind));
 
         return new Ghost
         {
@@ -333,7 +394,27 @@ public static class GhostAnalyzer
             PredictedSagittalCrossing = predictedS,
             Crossings = crossings,
             Fields = fields,
+            Orders = w.Orders,
+            OrderEfficiency = w.Efficiency,
         };
+    }
+
+    /// <summary>
+    /// Where a paraxial ray leaving layout surface <paramref name="from"/> on axis with unit slope
+    /// lands on the sensor: how far a kick to the slope there moves the ghost.
+    /// </summary>
+    private static double Carry(OpticalSystem sys, ParaxialResult p, int from)
+    {
+        int last = sys.Surfaces.Count - 1;
+        double y = 0.0, u = 1.0;
+        for (int i = from + 1; i <= last; i++)
+        {
+            y += u * sys.Surfaces[i - 1].Thickness;
+            if (i == last) break;
+            double w = p.N[i - 1] * u - y * (p.N[i] - p.N[i - 1]) * sys.Surfaces[i].VertexCurvature;
+            u = w / p.N[i];
+        }
+        return y;
     }
 
     /// <summary>
@@ -366,73 +447,23 @@ public static class GhostAnalyzer
     /// plane for the tangential focus, across it for the sagittal - Coddington's foci, traced.
     /// NaN where the rays do not arrive or run parallel.
     /// </summary>
-    public static (double Tangential, double Sagittal) RealFoci(OpticalSystem sys, double[] n, ParaxialResult p, double field)
-    {
-        const double d = 1e-3;
-        var up = RealRayTrace.TraceRecord(sys, n, p, field, d, 0.0, atParaxialFocus: false)[^1];
-        var down = RealRayTrace.TraceRecord(sys, n, p, field, -d, 0.0, atParaxialFocus: false)[^1];
-        var right = RealRayTrace.TraceRecord(sys, n, p, field, 0.0, d, atParaxialFocus: false)[^1];
-        var left = RealRayTrace.TraceRecord(sys, n, p, field, 0.0, -d, atParaxialFocus: false)[^1];
-
-        // Two rays at heights y1, y2 on the sensor with slopes t1, t2 meet at z = -(y1 - y2)/(t1 - t2)
-        // from it; short of it is -z.
-        static double Meet(double a, double b, double ta, double tb) =>
-            Math.Abs(ta - tb) > 1e-15 ? (a - b) / (ta - tb) : double.PositiveInfinity;
-
-        double t = up.Ok && down.Ok ? Meet(up.Y, down.Y, up.M / up.N, down.M / down.N) : double.NaN;
-        double s = right.Ok && left.Ok ? Meet(right.X, left.X, right.L / right.N, left.L / left.N) : double.NaN;
-        return (t, s);
-    }
+    public static (double Tangential, double Sagittal) RealFoci(OpticalSystem sys, double[] n, ParaxialResult p, double field) =>
+        GhostTracer.Plain(sys, n, p).Foci(field);
 
     /// <summary>
     /// The fields between <paramref name="from"/> and <paramref name="to"/> at which the ghost's real
-    /// tangential or sagittal focus is on the sensor: a fine scan for a change of sign, each then
-    /// closed by bisection. Found by real rays, so a crossing the third order misses is found too.
+    /// tangential or sagittal focus is on the sensor (see <see cref="GhostTracer.Crossings"/>).
     /// </summary>
     public static IEnumerable<(double Field, string Kind)> RealCrossings(OpticalSystem sys, double[] n, ParaxialResult p,
-                                                                         double from, double to, int steps = 120)
-    {
-        var found = new List<(double, string)>();
-        var foci = new (double T, double S)[steps + 1];
-        var h = new double[steps + 1];
-        for (int i = 0; i <= steps; i++)
-        {
-            h[i] = from + (to - from) * i / steps;
-            foci[i] = RealFoci(sys, n, p, h[i]);
-        }
-        foreach (var kind in new[] { "T", "S" })
-        {
-            Func<(double T, double S), double> pick = kind == "T" ? f => f.T : f => f.S;
-            for (int i = 0; i < steps; i++)
-            {
-                double a = pick(foci[i]), b = pick(foci[i + 1]);
-                if (!double.IsFinite(a) || !double.IsFinite(b) || Math.Sign(a) == Math.Sign(b) || a == 0) continue;
-                double lo = h[i], hi = h[i + 1], flo = a;
-                bool ok = true;
-                for (int k = 0; k < 60; k++)
-                {
-                    double mid = 0.5 * (lo + hi);
-                    double fm = pick(RealFoci(sys, n, p, mid));
-                    if (!double.IsFinite(fm)) { ok = false; break; }
-                    if (Math.Sign(fm) == Math.Sign(flo)) { lo = mid; flo = fm; } else hi = mid;
-                }
-                // A focus also changes sign by passing through infinity, where the ghost's rays
-                // leave parallel; that is no crossing, and there the focus distance grows instead
-                // of vanishing.
-                double at = 0.5 * (lo + hi);
-                double end = pick(RealFoci(sys, n, p, at));
-                if (ok && double.IsFinite(end) && Math.Abs(end) < 1e-6 * (Math.Abs(a) + Math.Abs(b)))
-                    found.Add((at, kind));
-            }
-        }
-        return found.OrderBy(x => x.Item1);
-    }
+                                                                         double from, double to, int steps = 120) =>
+        GhostTracer.Plain(sys, n, p).Crossings(from, to, steps);
 
     /// <summary>The ghost at one field: paraxially, and by real rays when asked.</summary>
-    private static GhostField AtField(Context c, GhostLayout layout, double[] n, ParaxialResult p,
+    private static GhostField AtField(Context c, GhostLayout layout, GhostTracer tracer, ParaxialResult p,
                                       ParaxialResult? off, double[] sd, int ghostStop, double h,
                                       double power, double radius, double airy,
-                                      double deltaZ, double sagT, double sagS, string? crossing)
+                                      double deltaZ, double sagT, double sagS,
+                                      double shiftX, double shiftY, string? crossing)
     {
         var sys = layout.System;
         int last = sys.Surfaces.Count - 1;
@@ -444,7 +475,7 @@ public static class GhostAnalyzer
 
         // Paraxially the beam at each surface is a disc of the marginal ray's radius about the
         // chief ray; what fraction of it the surface's aperture passes, at the worst surface.
-        double center = onAxis ? 0.0 : off != null ? off.Ybar[^1] * s : double.NaN;
+        double center = (onAxis ? 0.0 : off != null ? off.Ybar[^1] * s : double.NaN) + shiftY;
         double imageHeight = onAxis ? 0.0 : double.IsNaN(c.ImageAtReference) ? double.NaN : c.ImageAtReference * s;
         double passed = onAxis || off != null ? 1.0 : double.NaN;
         if (off != null && !onAxis)
@@ -464,18 +495,18 @@ public static class GhostAnalyzer
         {
             return new GhostField
             {
-                Field = h, ImageHeight = imageHeight, ParaxialCenter = center, ParaxialRadius = radius,
+                Field = h, ImageHeight = imageHeight, ParaxialCenter = center, ParaxialCenterX = shiftX, ParaxialRadius = radius,
                 ParaxialTransmitted = passed, ParaxialIrradiance = paraxialIrradiance, Traced = false,
                 PredictedTangentialFocus = predictedT, PredictedSagittalFocus = predictedS,
             };
         }
-        var (focusT, focusS) = RealFoci(sys, n, p, h);
-        var spot = Spot(sys, n, p, sd, ghostStop, h, power, airy, c.Options.PupilSamples);
-        var chief = Arrive(sys, n, p, sd, ghostStop, h, 0.0, 0.0);
+        var (focusT, focusS) = tracer.Foci(h);
+        var spot = Spot(tracer, h, power, airy, c.Options.PupilSamples);
+        var chief = tracer.Trace(h, 0.0, 0.0, clip: true);
 
         return new GhostField
         {
-            Field = h, ImageHeight = imageHeight, ParaxialCenter = center, ParaxialRadius = radius,
+            Field = h, ImageHeight = imageHeight, ParaxialCenter = center, ParaxialCenterX = shiftX, ParaxialRadius = radius,
             ParaxialTransmitted = passed, ParaxialIrradiance = paraxialIrradiance, Traced = true,
             Transmitted = spot.Transmitted, CentroidX = spot.X, CentroidY = spot.Y,
             ChiefY = chief?.Y ?? double.NaN, RmsRadius = spot.Rms, MaxRadius = spot.Max,
@@ -493,11 +524,25 @@ public static class GhostAnalyzer
     /// its entrance pupil, those inside the pupil traced. Its irradiance is the power that
     /// arrives over a disc of √2 × its RMS radius, no smaller than the Airy disc.
     /// </summary>
-    private static SpotResult Spot(OpticalSystem sys, double[] n, ParaxialResult p, double[] sd, int ghostStop,
-                                   double h, double power, double airy, int across)
+    private static SpotResult Spot(GhostTracer tracer, double h, double power, double airy, int across, int finest = 161)
     {
+        // A beam cut down to a sliver by vignetting reaches the sensor as a handful of rays, whose
+        // spread says nothing: the grid is refined until enough arrive to measure it.
+        const int enough = 64;
         int m = Math.Max(3, across | 1);           // odd, so the chief ray is on it
-        int launched = 0, arrived = 0;
+        var spot = Sample(tracer, h, power, airy, m, out int arrived);
+        while (arrived > 0 && arrived < enough && m < finest)
+        {
+            m = Math.Min(finest, 2 * m + 1);
+            spot = Sample(tracer, h, power, airy, m, out arrived);
+        }
+        return spot;
+    }
+
+    private static SpotResult Sample(GhostTracer tracer, double h, double power, double airy, int m, out int arrived)
+    {
+        int launched = 0;
+        arrived = 0;
         double sx = 0, sy = 0, sxx = 0, syy = 0;
         var xs = new List<double>();
         var ys = new List<double>();
@@ -509,10 +554,10 @@ public static class GhostAnalyzer
                 double px = -1.0 + 2.0 * ix / (m - 1);
                 if (px * px + py * py > 1.0 + 1e-12) continue;
                 launched++;
-                var hit = Arrive(sys, n, p, sd, ghostStop, h, py, px);
+                var hit = tracer.Trace(h, py, px, clip: true);
                 if (hit == null) continue;
                 arrived++;
-                var (x, y) = hit.Value;
+                double x = hit.Value.X, y = hit.Value.Y;
                 xs.Add(x); ys.Add(y);
                 sx += x; sy += y; sxx += x * x; syy += y * y;
             }
@@ -524,29 +569,11 @@ public static class GhostAnalyzer
         double rms = Math.Sqrt(Math.Max(0.0, (sxx + syy) / arrived - cx * cx - cy * cy));
         double max = 0.0;
         for (int k = 0; k < xs.Count; k++) max = Math.Max(max, Math.Sqrt((xs[k] - cx) * (xs[k] - cx) + (ys[k] - cy) * (ys[k] - cy)));
-        double effective = Math.Max(Math.Sqrt(2.0) * rms, airy);
+        // Diffraction by the part of the pupil that gets through: a beam vignetted to a fraction of
+        // its area spreads as an aperture of that size does, wider by the square root.
+        double effective = Math.Max(Math.Sqrt(2.0) * rms, airy / Math.Sqrt(transmitted));
         double lit = effective > 0 ? power * transmitted / (Math.PI * effective * effective) : double.PositiveInfinity;
         return new SpotResult(transmitted, cx, cy, rms, max, effective, lit);
-    }
-
-    /// <summary>
-    /// Where one real ray lands on the sensor, or null if it does not get there: missed a
-    /// surface, was totally internally reflected, or fell outside a surface's semi-diameter.
-    /// The ghost's own stop is not checked - the pupil grid is what fills it.
-    /// </summary>
-    private static (double X, double Y)? Arrive(OpticalSystem sys, double[] n, ParaxialResult p, double[] sd,
-                                                int ghostStop, double field, double py, double px)
-    {
-        var hits = RealRayTrace.TraceRecord(sys, n, p, field, py, px, atParaxialFocus: false);
-        int last = hits.Length - 1;
-        for (int j = 1; j < last; j++)
-        {
-            if (!hits[j].Ok) return null;
-            if (j == ghostStop || sd[j] <= 0) continue;
-            if (Math.Sqrt(hits[j].X * hits[j].X + hits[j].Y * hits[j].Y) > sd[j] * (1 + 1e-9)) return null;
-        }
-        if (!hits[last].Ok) return null;
-        return (hits[last].X, hits[last].Y);
     }
 
     /// <summary>The fields to analyse: those asked for, or a sweep from the axis past the lens's largest.</summary>

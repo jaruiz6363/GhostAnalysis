@@ -56,6 +56,19 @@ The method is Abd El-Maksoud and Sasian's paraxial ghost analysis:
    real spot itself is scanned finely over field, and traced in full where it is brightest,
    wherever that falls between the fields of the sweep.
 
+10. **The sensor's size.** Given one (`--sensor 36x24`), light landing off it is not seen, and a
+    ghost that reflects from the sensor reflects only where the sensor is.
+11. **The sensor's diffraction.** Its pixels repeat, so it is a reflective grating: each
+    reflection from it sends light into orders (m, n), turned by the grating equation
+    L' = L + mλ/Λx, M' = M + nλ/Λy, each a copy of the ghost displaced on the sensor. Given its
+    period (`--sensor-period`, the pixel pitch, or twice it for a Bayer colour sensor), every
+    sensor ghost becomes one ghost per order, traced in segments with the grating's kick at
+    each reflection from the sensor. How the reflected light divides among the orders depends
+    on the pixel's structure; by default each pixel is a reflecting aperture filling a fraction
+    f of the period (`--fill`, default 0.5), weighting order (m, n) by sinc²(mf) sinc²(nf),
+    normalised over the orders that propagate - f = 1 is a mirror. A measured table can be
+    given instead (`--order-table`, lines of `m, n, efficiency`).
+
 The fields are swept from the axis to 1.2 times the lens's largest field - a bright source just
 outside the picture still sends its ghosts into it - and each ghost is ranked by its worst field.
 
@@ -97,6 +110,12 @@ ghost -i lens.len --no-sensor -n 4
 | `--pupil n` | real rays across each ghost's pupil (default 21) |
 | `--paraxial` | no real rays: the papers' paraxial analysis only |
 | `--detail n` | show the n brightest ghosts field by field (default 5) |
+| `--sensor WxH` | the sensor's size, in lens units: width across the field's plane, height along it |
+| `--sensor-period P[xQ]` | its grating period in micrometres; the sensor then diffracts |
+| `--fill f` | each pixel's reflecting aperture as a fraction of the period (default 0.5) |
+| `--order-table file` | measured order efficiencies instead: lines of `m, n, efficiency` |
+| `--orders n` | the largest \|m\| and \|n\| analysed (default 2) |
+| `--min-efficiency e` | leave out orders with less than e of the reflected light (default 0.001) |
 
 Reflectances are fractions: 0.1 is 10%. A lens file whose only field is on axis is analysed on
 axis unless `--fields` is given.
@@ -106,8 +125,8 @@ axis unless `--fields` is given.
 - More than one wavelength.
 - Image surfaces beyond third order, from AberrationCalculator's fifth- and seventh-order
   coefficients.
-- Diffraction by the sensor: the pixel array is a reflective grating, so each reflection from
-  the sensor sends light into orders (m, n), each a copy of the ghost displaced on the sensor.
+- Fields off the meridian: the sweep runs along the sensor's height; a diagonal or a
+  two-dimensional map of the sensor is not yet traced.
 
 ## Building
 
