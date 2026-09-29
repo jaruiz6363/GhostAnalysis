@@ -4,9 +4,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Authors>Javier A Ruiz</Authors>
-    <Company>Javier A Ruiz</Company>
-    <Copyright>Copyright (c) 2026 Javier A Ruiz</Copyright>
+    <Authors>Javier Ruiz, Claude Code</Authors>
+    <Company>Javier Ruiz</Company>
+    <Copyright>Copyright (c) 2026 Javier Ruiz and Claude Code</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryType>git</RepositoryType>
     <Description>Ghost image analysis of a lens: every even-reflection ghost unfolded into a lens of its own and analysed on AberrationCalculator</Description>

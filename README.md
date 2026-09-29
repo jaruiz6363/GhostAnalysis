@@ -72,3 +72,11 @@ ghost -i lens.len --no-sensor -n 4
 ## Building
 
 See [BUILDING.md](BUILDING.md). Clone with `--recursive`: AberrationCalculator is a submodule.
+
+## Authors
+
+Javier Ruiz and Claude Code.
+
+## License
+
+MIT - see [LICENSE](LICENSE).
