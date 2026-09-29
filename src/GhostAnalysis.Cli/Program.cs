@@ -21,6 +21,9 @@ public static class Program
         "  --no-sensor                   the sensor does not reflect, as in the papers\n" +
         "  --coated <R>                  every glass-air surface reflects R (default: uncoated Fresnel)\n" +
         "  --power <P>                   power entering the lens (default 1)\n" +
+        "  --wavelengths <list>          the wavelengths, in micrometres, each with an optional weight:\n" +
+        "                                '0.486,0.588,0.656' or '0.486:1,0.588:2,0.656:1', or 'primary'\n" +
+        "                                (default: the lens's own, with its weights)\n" +
         "  --fields <f1,f2,...>          the fields to analyse, in the lens's field units\n" +
         "                                (default: the axis to 1.2 x the lens's largest field, in 12 steps)\n" +
         "  --field-extent <x>            sweep to x times the lens's largest field (default 1.2)\n" +
@@ -66,6 +69,7 @@ public static class Program
             double? width = null, height = null, periodX = null, periodY = null;
             double fill = 0.5, minEfficiency = 1e-3;
             double? fieldAngle = 0.0;
+            List<(double Um, double Weight)>? wavelengths = null;
             int maxOrder = 2;
             Dictionary<(int, int), double>? table = null;
             (double, double) Pair(string text)
@@ -105,6 +109,18 @@ public static class Program
                     case "--sensor": (width, height) = Pair(Next()); break;
                     case "--sensor-period": (periodX, periodY) = Pair(Next()); break;
                     case "--fill": fill = double.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--wavelengths":
+                        string list = Next();
+                        // "primary" is the lens's primary alone, marked here and resolved once the lens is read.
+                        wavelengths = list.Equals("primary", StringComparison.OrdinalIgnoreCase)
+                            ? new List<(double, double)> { (-1.0, 1.0) }
+                            : list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(w =>
+                              {
+                                  var parts = w.Split(':');
+                                  return (double.Parse(parts[0], CultureInfo.InvariantCulture),
+                                          parts.Length > 1 ? double.Parse(parts[1], CultureInfo.InvariantCulture) : 1.0);
+                              }).ToList();
+                        break;
                     case "--field-direction":
                         string direction = Next().ToLowerInvariant();
                         fieldAngle = direction switch
@@ -128,8 +144,12 @@ public static class Program
 
             var catalog = CatalogLocator.LoadBundled();
             var lens = LensFile.Read(input, catalog);
-            var result = GhostAnalyzer.Analyze(lens, catalog, new GhostOptions
+            var result = GhostSpectrum.Analyze(lens, catalog, new GhostOptions
             {
+                Wavelengths = wavelengths == null ? null
+                    : wavelengths.Count == 1 && wavelengths[0].Um < 0
+                        ? new[] { (lens.Wavelengths[Math.Max(0, lens.PrimaryWavelengthIndex)].Value, 1.0) }
+                        : wavelengths,
                 Reflections = reflections,
                 ImageReflects = !noSensor,
                 ImageReflectance = sensor,
@@ -165,16 +185,23 @@ public static class Program
         }
     }
 
-    /// <summary>The brightest ghosts drawn in the lens: an SVG each, and a page with them all.</summary>
-    private static void WriteLayouts(GhostResult result, string input, string dir, int count, double? field)
+    /// <summary>
+    /// The brightest ghosts over the spectrum drawn in the lens, at the primary wavelength: an SVG
+    /// each, and a page with them all.
+    /// </summary>
+    private static void WriteLayouts(GhostSpectrum spectrum, string input, string dir, int count, double? field)
     {
         Directory.CreateDirectory(dir);
         string stem = Path.GetFileNameWithoutExtension(input);
+        var result = spectrum.PrimaryResult;
         // At a field given, the ghosts brightest there - at the nearest field analysed; a ghost
         // bright elsewhere may be wholly vignetted at it. Otherwise the brightest at their worst.
         var ghosts = (field is double f
-            ? result.Ghosts.OrderByDescending(g => g.Fields.MinBy(x => Math.Abs(x.Field - f))?.Brightness ?? 0.0)
-            : result.Ranked).Take(count).ToList();
+                ? spectrum.Ghosts.OrderByDescending(g => g.Irradiance.Count == 0 ? 0.0
+                    : g.Irradiance[g.Fields.Select((x, i) => (Math.Abs(x - f), i)).Min().i])
+                : spectrum.Ranked)
+            .Select(g => g.PerWavelength[spectrum.Primary]).Where(g => g != null).Select(g => g!)
+            .Take(count).ToList();
         for (int i = 0; i < ghosts.Count; i++)
         {
             string name = new string(ghosts[i].Name.Select(ch => char.IsLetterOrDigit(ch) || ch is '+' or '-' or '(' or ')' ? ch : ch == ',' ? '-' : '_').ToArray());

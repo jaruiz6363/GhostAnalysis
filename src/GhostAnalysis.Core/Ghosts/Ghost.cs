@@ -27,6 +27,25 @@ public sealed class Ghost
     /// <summary>The share of the sensor's reflected light that goes into those orders; 1 without any.</summary>
     public double OrderEfficiency { get; init; } = 1.0;
 
+    /// <summary>The wavelength the ghost was analysed at, in micrometres.</summary>
+    public double Wavelength { get; init; }
+
+    /// <summary>The Airy radius of the ghost's cone at the sensor: the smallest spot it can make.</summary>
+    public double AiryRadius { get; init; }
+
+    /// <summary>Rays across the pupil its spots were traced with.</summary>
+    public int PupilSamples { get; init; } = 21;
+
+    /// <summary>The ghost's real irradiance at any field, traced as its analysis traces one.</summary>
+    public double IrradianceAt(double field) => GhostAnalyzer.SpotAt(this, field).Irradiance;
+
+    /// <summary>The ghost's real spot at any field: its irradiance, centroid on the sensor, and RMS radius.</summary>
+    public (double Irradiance, double X, double Y, double Rms) SpotAt(double field)
+    {
+        var at = Fields.FirstOrDefault(f => f.Field == field && f.Traced);
+        return at != null ? (at.Irradiance, at.CentroidX, at.CentroidY, at.RmsRadius) : GhostAnalyzer.SpotAt(this, field);
+    }
+
     /// <summary>The paraxial trace of the ghost's layout, with its own stop and aperture.</summary>
     public required ParaxialResult Paraxial { get; init; }
 

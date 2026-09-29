@@ -13,8 +13,18 @@ public static class Report
 {
     private static readonly CultureInfo C = CultureInfo.InvariantCulture;
 
+    /// <summary>
+    /// The ghosts over a spectrum: ranked by their light added up over it, each with its colour,
+    /// and the rest of the report - crossings, field by field, first order - at the primary
+    /// wavelength. With one wavelength, the single-wavelength report.
+    /// </summary>
+    public static string Write(GhostSpectrum s, int detailed = 5) =>
+        s.Results.Count == 1 ? Write(s.Results[0], detailed) : Write(s.PrimaryResult, detailed, s);
+
     /// <param name="detailed">How many of the brightest ghosts to show field by field.</param>
-    public static string Write(GhostResult r, int detailed = 5)
+    public static string Write(GhostResult r, int detailed = 5) => Write(r, detailed, null);
+
+    private static string Write(GhostResult r, int detailed, GhostSpectrum? spectrum)
     {
         var sb = new StringBuilder();
         var lens = r.Lens;
@@ -24,7 +34,11 @@ public static class Report
 
         sb.AppendLine($"Ghost analysis: {lens.Title}");
         sb.AppendLine();
-        sb.AppendLine(F($"Wavelength:        {r.Wavelength:0.######} um"));
+        if (spectrum == null)
+            sb.AppendLine(F($"Wavelength:        {r.Wavelength:0.######} um"));
+        else
+            sb.AppendLine("Wavelengths:       " + string.Join(", ", spectrum.Wavelengths.Select((w, i) =>
+                F($"{w.Um:0.######}") + (w.Weight != 1.0 ? F($" (weight {w.Weight:0.###})") : "") + (i == spectrum.Primary ? " (primary)" : ""))) + " um");
         sb.AppendLine(F($"Focal length:      {r.Nominal.Efl:0.######}"));
         sb.AppendLine(F($"Entrance pupil:    {r.Nominal.Epd:0.######}"));
         sb.AppendLine($"Reflections:       {r.Options.Reflections} per ghost");
@@ -61,13 +75,22 @@ public static class Report
             sb.AppendLine($"WARNING: glasses the catalogs lack, traced as air: {string.Join(", ", r.Unresolved)}");
         sb.AppendLine();
 
-        sb.AppendLine("Surface reflectances:");
-        for (int k = 1; k <= image; k++)
-            if (r.Reflectance[k] > 0) sb.AppendLine(F($"  {k,3}  {r.Reflectance[k]:0.000000}{(k == image ? "  (sensor)" : "")}"));
-        sb.AppendLine();
-
-        sb.AppendLine($"{r.Ghosts.Count} ghosts, brightest at their worst field first:");
         int wide = Math.Max(12, r.Ghosts.Count == 0 ? 12 : r.Ghosts.Max(g => g.Name.Length));
+        if (spectrum == null)
+        {
+            sb.AppendLine("Surface reflectances:");
+            for (int k = 1; k <= image; k++)
+                if (r.Reflectance[k] > 0) sb.AppendLine(F($"  {k,3}  {r.Reflectance[k]:0.000000}{(k == image ? "  (sensor)" : "")}"));
+            sb.AppendLine();
+        }
+        else
+        {
+            Spectral(sb, spectrum, detailed, wide, unit);
+            sb.AppendLine(F($"The rest of this report is at the primary wavelength, {r.Wavelength:0.######} um."));
+            sb.AppendLine();
+        }
+
+        sb.AppendLine($"{r.Ghosts.Count} ghosts, brightest at their worst field first{(spectrum == null ? "" : F($", at {r.Wavelength:0.######} um"))}:");
         sb.AppendLine($"  {"Ghost".PadRight(wide)}  Peak irrad.   at field     x on sensor y      Radius    Axis irrad.       ΔZ     Mag   Stop");
         foreach (var g in r.Ranked)
         {
@@ -162,6 +185,54 @@ public static class Report
         sb.AppendLine("  ghost focuses short of it; L' from the ghost's exit pupil to the ghost's image (L'_g) and to the");
         sb.AppendLine("  lens's image (L'_g,n).");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// The spectral part: each surface's reflectance at each wavelength, the ghosts ranked by their
+    /// light over the spectrum with each wavelength's share of it, and the brightest ghosts'
+    /// colour - where each wavelength focuses and lands.
+    /// </summary>
+    private static void Spectral(StringBuilder sb, GhostSpectrum s, int detailed, int wide, string unit)
+    {
+        var r = s.PrimaryResult;
+        int image = r.Lens.Surfaces.Count - 1;
+        string heads = string.Concat(s.Wavelengths.Select(w => F($"{w.Um,10:0.####}")));
+
+        sb.AppendLine("Surface reflectances, at each wavelength (um):");
+        sb.AppendLine("  Surface" + heads);
+        for (int k = 1; k <= image; k++)
+            if (s.Results.Any(x => x.Reflectance[k] > 0))
+                sb.AppendLine(F($"  {k,7}") + string.Concat(s.Results.Select(x => F($"{x.Reflectance[k],10:0.000000}"))) + (k == image ? "  (sensor)" : ""));
+        sb.AppendLine();
+
+        sb.AppendLine($"{s.Ghosts.Count} ghosts, brightest over the spectrum at their worst field first:");
+        sb.AppendLine($"  {"Ghost".PadRight(wide)}  Peak irrad.   at field    Share of it at each wavelength (um):");
+        sb.AppendLine($"  {"".PadRight(wide)}                        " + heads);
+        foreach (var g in s.Ranked)
+            sb.AppendLine(F($"  {g.Name.PadRight(wide)} {g.PeakIrradiance,12:0.000E+00} {g.PeakField,10:0.###}  ") +
+                          string.Concat(g.Shares.Select(x => F($"{100 * x,9:0.0}%"))));
+        sb.AppendLine("  Peak irradiance: the ghost's light over the spectrum, each wavelength weighted by its share of");
+        sb.AppendLine("  the light entering, at the field where it is brightest; the shares are its colour there.");
+        sb.AppendLine();
+
+        sb.AppendLine("The brightest ghosts' colour, at their brightest field over the spectrum:");
+        foreach (var g in s.Ranked.Take(detailed))
+        {
+            sb.AppendLine(F($"{g.Name}, at field {g.PeakField:0.###} {unit}:"));
+            sb.AppendLine("    Wavelength         ΔZ        Irradiance   x on sensor y        RMS");
+            for (int i = 0; i < s.Wavelengths.Count; i++)
+            {
+                var gi = g.PerWavelength[i];
+                if (gi == null) { sb.AppendLine(F($"    {s.Wavelengths[i].Um,10:0.####}   (this order does not propagate)")); continue; }
+                (double Irradiance, double X, double Y, double Rms) spot = s.PrimaryResult.Options.RealRays
+                    ? gi.SpotAt(g.PeakField)
+                    : (gi.Irradiance, double.NaN, double.NaN, double.NaN);
+                sb.AppendLine(F($"    {s.Wavelengths[i].Um,10:0.####} {gi.DeltaZ,10:0.000} {spot.Irradiance,17:0.000E+00} {spot.X,9:0.0000} {spot.Y,9:0.0000} {spot.Rms,10:0.0000}"));
+            }
+        }
+        sb.AppendLine("  ΔZ: how far short of the sensor each wavelength's ghost focuses on axis. The rest at the field");
+        sb.AppendLine("  named, each wavelength's own irradiance, unweighted: where it lands shows the ghost's colour fringe.");
+        sb.AppendLine();
     }
 
     private static string F(FormattableString s) => s.ToString(C);

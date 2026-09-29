@@ -72,7 +72,16 @@ The method is Abd El-Maksoud and Sasian's paraxial ghost analysis:
     normalised over the orders that propagate - f = 1 is a mirror. A measured table can be
     given instead (`--order-table`, lines of `m, n, efficiency`).
 
-12. **Drawings.** `--layouts` draws the brightest ghosts in the lens, each at its worst field:
+12. **Colour.** The lens is analysed at each of its wavelengths (or those given with
+    `--wavelengths`): the glasses' indices, and so each ghost's focus, size and place, change
+    with the wavelength, and so do the Fresnel reflectances, the grating's angles and the Airy
+    disc. Each ghost's light is added up over the spectrum, each wavelength weighted by its
+    share of the light entering, and ranked by that; the report gives each wavelength's share of
+    it - the ghost's colour - and, for the brightest, where each wavelength focuses and lands.
+    Fields one wavelength finds special are traced at every other, so the sum at a sharp
+    off-axis peak is traced, not interpolated. The rest of the report, and the drawings, are at
+    the primary wavelength.
+13. **Drawings.** `--layouts` draws the brightest ghosts in the lens, each at its worst field:
     the lens in section, and a fan of the ghost's real rays folded back into it - in, back after
     the first reflection, forward after the second, each leg in its own colour - with the
     reflecting surfaces in red, the ghost's focus marked, the lens's own rays faintly behind,
@@ -114,6 +123,7 @@ ghost -i lens.len --no-sensor -n 4
 | `--no-sensor` | the sensor does not reflect, as in the papers |
 | `--coated R` | every glass-air surface reflects R (default: uncoated Fresnel) |
 | `--power P` | power entering the lens (default 1) |
+| `--wavelengths list` | the wavelengths in µm, each with an optional weight: `0.486,0.588,0.656` or `0.486:1,0.588:2,0.656:1`, or `primary` (default: the lens's own) |
 | `--fields f1,f2,...` | the fields to analyse, in the lens's field units |
 | `--field-extent x` | sweep to x times the lens's largest field (default 1.2) |
 | `--field-steps n` | steps in the sweep (default 12) |
@@ -136,7 +146,7 @@ axis unless `--fields` is given.
 
 ## Not yet
 
-- More than one wavelength.
+- Coatings that change with wavelength or angle: a coated surface reflects the same at every one.
 - Image surfaces beyond third order, from AberrationCalculator's fifth- and seventh-order
   coefficients.
 - A two-dimensional map of the sensor: each sweep runs along one direction across it.

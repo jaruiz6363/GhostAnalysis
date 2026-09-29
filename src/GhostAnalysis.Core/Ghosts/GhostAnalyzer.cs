@@ -50,6 +50,25 @@ public sealed class GhostOptions
 
     /// <summary>The sensor's size and grating. By default it has no edge and does not diffract.</summary>
     public Sensor Sensor { get; init; } = new();
+
+    /// <summary>
+    /// The wavelengths, in micrometres, with their weights - the share of the light entering at
+    /// each. Null for the lens's own. A single analysis (<see cref="GhostAnalyzer.Analyze"/>) is at
+    /// <see cref="Wavelength"/>; a spectral one (<see cref="GhostSpectrum.Analyze"/>) at each of these.
+    /// </summary>
+    public IReadOnlyList<(double Um, double Weight)>? Wavelengths { get; init; }
+
+    /// <summary>The wavelength a single analysis is at, in micrometres; null for the lens's primary.</summary>
+    public double? Wavelength { get; init; }
+
+    /// <summary>These options, at another wavelength.</summary>
+    public GhostOptions At(double um) => new()
+    {
+        Reflections = Reflections, ImageReflects = ImageReflects, ImageReflectance = ImageReflectance,
+        CoatedReflectance = CoatedReflectance, InputPower = InputPower, Fields = Fields, FieldExtent = FieldExtent,
+        FieldSteps = FieldSteps, RealRays = RealRays, PupilSamples = PupilSamples, Sensor = Sensor,
+        Wavelengths = Wavelengths, Wavelength = um,
+    };
 }
 
 /// <summary>Every ghost of one lens, analysed at one wavelength.</summary>
@@ -131,7 +150,7 @@ public static class GhostAnalyzer
             if (r < 0.0 || r > 1.0)
                 throw new ArgumentOutOfRangeException(nameof(options), $"A reflectance is a fraction from 0 to 1, not {r} (10% is 0.1).");
 
-        double wave = lens.Wavelengths[Math.Max(0, lens.PrimaryWavelengthIndex)].Value;
+        double wave = options.Wavelength ?? lens.Wavelengths[Math.Max(0, lens.PrimaryWavelengthIndex)].Value;
         var unresolved = new List<string>();
         var n = IndexResolver.Build(lens, catalog, wave, unresolved);
         var nominal = ParaxialTrace.Trace(lens, n, 0.0);
@@ -401,7 +420,17 @@ public static class GhostAnalyzer
             Fields = fields,
             Orders = w.Orders,
             OrderEfficiency = w.Efficiency,
+            Wavelength = c.Wavelength,
+            AiryRadius = airy,
+            PupilSamples = c.Options.PupilSamples,
         };
+    }
+
+    /// <summary>A ghost's real spot at one field, as its field-by-field analysis finds it: irradiance, centroid, RMS.</summary>
+    internal static (double Irradiance, double X, double Y, double Rms) SpotAt(Ghost g, double field)
+    {
+        var s = Spot(g.Tracer, field, g.Power, g.AiryRadius, g.PupilSamples);
+        return (s.Irradiance, s.X, s.Y, s.Rms);
     }
 
     /// <summary>
