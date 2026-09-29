@@ -117,7 +117,7 @@ reflectance above 1 is refused.
 | `--layout-dir <dir>` | beside `-o`, or here | where to write the drawings |
 | `--layout-field <f>` | each at its brightest | draw at this field the ghosts brightest there |
 | `--export-layouts <dir>` | | write each ghost's unfolded lens there (`<lens>_G4-3.lhlt`, ...), and every ghost's results, a row per ghost, field and wavelength, as `<lens>_ghosts.csv` - to check a ghost in another lens program ([verification](verification.md)) |
-| `--export-format <ext>` | `lhlt` | the unfolded lenses' format: `lhlt`, `zmx`, `seq`, `len`, `otx` or `json` |
+| `--export-format <ext>` | `lhlt` | the unfolded lenses' format: `lhlt`, `zmx`, `seq`, `len`, `otx` or `json`. `lhlt`, `zmx` and `otx` are checked exact; `seq` and `len` have caveats and `json` is not usable yet ([verification](verification.md#35-the-other-formats-and-optalix-and-oslo-themselves)) |
 | `-h`, `--help` | | the option list |
 
 ## 4. Reading the report

@@ -156,6 +156,30 @@ The papers' lens at F, d and C (`--wavelengths 0.4861327,0.5875618,0.6562725`), 
 The dispersion is the same in both - G4,3's RMS falls from 0.096 in the blue to 0.041 in the red
 in each - and the RMS difference is the grid's, as at d.
 
+### 3.5 The other formats, and OpTaliX and OSLO themselves
+
+`--export-format` writes the same ghosts for other lens programs. Exported in each format and read
+back into LensHH-LT, Example 1's G10,1 - aspheres, model glasses, a finite object, three passes
+through the stop - and the papers' G4,3 give:
+
+| Format | Read back into LensHH-LT |
+|---|---|
+| ZEMAX `.zmx` | exact: first order, the aimed chief ray to every digit, apertures, ray aiming |
+| OpTaliX `.otx` | exact, ray aiming included |
+| CODE V `.seq` | the lens and first order exact; ray aiming comes back off (CODE V aims at the real stop by default) |
+| OSLO `.len` | the lens exact; a finite object is written as an object height and NA, the height's sign opposite to the field angle's, so the ghost is mirrored across the axis; the exit pupil in the 4th decimal |
+| Optiland `.json` | not usable yet: the model glasses are written beside the file, not installed, and read as air; no apertures; a finite object read as infinite |
+
+**In OpTaliX itself**, five exported ghosts - the papers' G4,3 and G2,1, Example 1's G10,1,
+Example 4's G10,9 and G8,7 - give GhostAnalysis's focal lengths. That
+check found a fault LensHH-LT's reader had hidden: OpTaliX names the glass the light goes on in on a
+mirror inside glass, and the writer left it off, so the three ghosts reflected inside glass came
+out with the wrong focal length. AberrationCalculator now writes it, and reads it.
+
+**In OSLO itself**, the papers' G4,3 and G2,1 - both reflected inside glass, and the two ghosts
+small enough for a ten-surface OSLO - give GhostAnalysis's focal lengths: OSLO carries the glass
+through a mirror, as written.
+
 ## 4. What is not checked
 
 LensHH-LT analyses an ordinary lens; what makes a ghost more than one is GhostAnalysis's alone:
