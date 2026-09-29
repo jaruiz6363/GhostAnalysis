@@ -102,10 +102,9 @@ public class FocusCrossingTests
         // Every crossing found, in every ghost, is a focus on the sensor.
         foreach (var ghost in r.Ghosts)
         {
-            var gn = IndexResolver.Build(ghost.Layout.System, Lenses.Catalog, r.Wavelength);
             foreach (var (field, kind) in ghost.Crossings)
             {
-                var f = GhostAnalyzer.RealFoci(ghost.Layout.System, gn, ghost.Paraxial, field);
+                var f = ghost.Tracer.Foci(field);
                 Assert.True(Math.Abs(kind == "T" ? f.Tangential : f.Sagittal) < 1e-4, $"{ghost.Name} {kind} {field}");
             }
         }

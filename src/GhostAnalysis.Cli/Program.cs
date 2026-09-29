@@ -30,11 +30,15 @@ public static class Program
         "  --field-steps <n>             steps in the sweep (default 12)\n" +
         "  --pupil <n>                   rays across each ghost's pupil (default 21)\n" +
         "  --paraxial                    no real rays: the papers' paraxial analysis only\n" +
+        "  --no-ray-aiming               launch real rays across the paraxial pupil, not aimed at the stop\n" +
         "  --detail <n>                  show the n brightest ghosts field by field (default 5)\n" +
         "  --layouts [n]                 draw the n brightest ghosts in the lens (default 5): an SVG\n" +
         "                                each, and one HTML page with them all\n" +
         "  --layout-dir <dir>            where to write them (default: beside -o, or here)\n" +
         "  --layout-field <f>            draw them all at this field (default: each at its brightest)\n" +
+        "  --export-layouts <dir>        write each ghost's unfolded lens there, to check in another lens\n" +
+        "                                program, and every ghost's results as a table (<lens>_ghosts.csv)\n" +
+        "  --export-format <ext>         the unfolded lenses' format: lhlt (default), zmx, seq, len, otx, json\n" +
         "\n" +
         "The sensor:\n" +
         "  --sensor <W>x<H>              its size, in lens units (mm), width by height.\n" +
@@ -60,12 +64,13 @@ public static class Program
             int reflections = 2;
             double sensor = 0.05, power = 1.0;
             double? coated = null;
-            bool noSensor = false, paraxial = false;
+            bool noSensor = false, paraxial = false, aim = true;
             List<double>? fields = null;
             double extent = 1.2;
             int steps = 12, pupil = 21, detail = 5, layouts = 0;
             string? layoutDir = null;
             double? layoutField = null;
+            string? exportDir = null, exportFormat = "lhlt";
             double? width = null, height = null, periodX = null, periodY = null;
             double fill = 0.5, minEfficiency = 1e-3;
             double? fieldAngle = 0.0;
@@ -98,6 +103,7 @@ public static class Program
                     case "--field-steps": steps = int.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--pupil": pupil = int.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--paraxial": paraxial = true; break;
+                    case "--no-ray-aiming": aim = false; break;
                     case "--detail": detail = int.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--layouts":
                         // The count is optional: a number next, or 5.
@@ -106,6 +112,8 @@ public static class Program
                         break;
                     case "--layout-dir": layoutDir = Next(); break;
                     case "--layout-field": layoutField = double.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--export-layouts": exportDir = Next(); break;
+                    case "--export-format": exportFormat = Next().TrimStart('.').ToLowerInvariant(); break;
                     case "--sensor": (width, height) = Pair(Next()); break;
                     case "--sensor-period": (periodX, periodY) = Pair(Next()); break;
                     case "--fill": fill = double.Parse(Next(), CultureInfo.InvariantCulture); break;
@@ -160,6 +168,7 @@ public static class Program
                 FieldSteps = steps,
                 PupilSamples = pupil,
                 RealRays = !paraxial,
+                AimRays = aim,
                 Sensor = new Sensor
                 {
                     Width = width, Height = height, PeriodX = periodX, PeriodY = periodY, FieldAngle = fieldAngle,
@@ -176,6 +185,7 @@ public static class Program
                 Console.WriteLine($"Written: {output}");
             }
             if (layouts > 0) WriteLayouts(result, input, layoutDir ?? Path.GetDirectoryName(Path.GetFullPath(output ?? "x")) ?? ".", layouts, layoutField);
+            if (exportDir != null) Export(result, input, exportDir, exportFormat!, catalog);
             return 0;
         }
         catch (Exception e) when (e is ArgumentException or FormatException or IOException or NotSupportedException or InvalidOperationException)
@@ -183,6 +193,30 @@ public static class Program
             Console.Error.WriteLine($"Error: {e.Message}");
             return 1;
         }
+    }
+
+    /// <summary>
+    /// Each ghost's unfolded lens, once per reflection path, in the format asked, at every wavelength
+    /// analysed; and every ghost's results at every wavelength as one table.
+    /// </summary>
+    private static void Export(GhostSpectrum spectrum, string input, string dir, string format, GlassCatalog catalog)
+    {
+        string ext = "." + format;
+        if (Array.IndexOf(LensFile.WritableExtensions, ext) < 0)
+            throw new ArgumentException($"'{format}' is not a format the ghosts can be written in: {string.Join(", ", LensFile.WritableExtensions)}.");
+        Directory.CreateDirectory(dir);
+        string stem = Path.GetFileNameWithoutExtension(input);
+        var result = spectrum.PrimaryResult;
+        int count = 0;
+        foreach (var g in result.Ghosts.GroupBy(x => x.Path.ToString()).Select(x => x.First()))
+        {
+            string name = new string(g.Path.ToString().Select(ch => char.IsLetterOrDigit(ch) ? ch : ch == ',' ? '-' : '_').ToArray());
+            GhostExport.WriteLayout(result, g, Path.Combine(dir, $"{stem}_{name}{ext}"), catalog, spectrum.Wavelengths, spectrum.Primary);
+            count++;
+        }
+        string csv = Path.Combine(dir, $"{stem}_ghosts.csv");
+        File.WriteAllText(csv, GhostExport.Csv(spectrum.Results));
+        Console.WriteLine($"Written: {count} unfolded ghosts as {ext} in {dir}, and {csv}");
     }
 
     /// <summary>

@@ -133,7 +133,7 @@ public class SensorTests
         Assert.InRange(g.Fields[0].Transmitted / (16.0 / (Math.PI * radius * radius)), 0.9, 1.1);
 
         var all = Run(new Sensor(), new[] { 0.0 }, pupil: 41).Find(3, 2)!;
-        Assert.Equal(1.0, all.Fields[0].Transmitted);
+        Assert.Equal(1.0, all.Fields[0].Transmitted, 9);
     }
 
     /// <summary>

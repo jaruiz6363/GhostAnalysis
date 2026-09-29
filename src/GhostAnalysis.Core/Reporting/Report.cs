@@ -167,7 +167,8 @@ public static class Report
             if (traced)
             {
                 sb.AppendLine("  Image: where the lens images the field. Ghost par.: the ghost's paraxial centre. Centroid,");
-                sb.AppendLine("  RMS and Max: its real spot. Passed: the share of rays not vignetted. Irradiance: its power");
+                sb.AppendLine("  RMS and Max: its real spot. Passed: the share of the paraxial pupil's light that arrives - the");
+                sb.AppendLine("  rays not vignetted, times the area of the real pupil the stop lets in. Irradiance: its power");
                 sb.AppendLine("  over a disc of radius √2 × RMS (the radius of an even disc of that RMS), but no smaller than");
                 sb.AppendLine("  the Airy radius of its cone. T and S focus: how far short of the sensor its real tangential");
                 sb.AppendLine("  and sagittal foci fall (0: in focus on it). A field marked T or S is a crossing; one");

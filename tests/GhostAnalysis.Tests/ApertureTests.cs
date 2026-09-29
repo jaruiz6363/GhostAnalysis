@@ -31,16 +31,15 @@ public class ApertureTests
         var lens = Bare();
         var r = GhostAnalyzer.Analyze(lens, Lenses.Catalog, new GhostOptions { Fields = new[] { 0.0 } });
         var n = r.NominalIndices.ToArray();
+        int count = lens.Surfaces.Count;
+        var rays = new GhostTracer(lens, n, r.Nominal, new double[count], 1, new bool[count], null, null, aim: true);
         for (int i = 2; i <= 4; i++)               // surface 1 is the stop, below
         {
-            // Every ray of the lens's own beam passes; the largest just touches.
+            // Every ray of the lens's own beam, aimed at its stop, passes; the largest just touches.
             double reach = 0;
             foreach (double h in new[] { 0.0, 5.0 })
                 foreach (double py in new[] { -1.0, 1.0 })
-                {
-                    var hit = RealRayTrace.TraceRecord(lens, n, r.Nominal, h, py, 0.0, atParaxialFocus: false)[i];
-                    reach = Math.Max(reach, Math.Abs(hit.Y));
-                }
+                    rays.Trace(h, py, 0.0, clip: false, (j, hit) => { if (j == i) reach = Math.Max(reach, Math.Abs(hit.Y)); });
             Assert.True(r.Apertures[i] >= reach - 1e-12, $"surface {i}: {r.Apertures[i]} against a ray at {reach}");
             Assert.True(r.Apertures[i] < reach * 1.02, $"surface {i}: {r.Apertures[i]}, the beam reaching {reach}");
         }

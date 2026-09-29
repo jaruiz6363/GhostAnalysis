@@ -125,13 +125,23 @@ that gets through.
 
 ## 7. Real rays
 
-A square grid of real rays (`--pupil`, 21 across by default) over the ghost's entrance pupil is
-traced through the unfolded ghost to the sensor, each ray stopped where it misses a surface's
+A square grid of real rays (`--pupil`, 21 across by default) over the ghost's stop is traced
+through the unfolded ghost to the sensor, each ray stopped where it misses a surface's
 semi-diameter, is totally internally reflected, or lands - or, for a sensor ghost, reflects - off
 the sensor's edge. The ghost's own stop is not checked: the pupil grid is what fills it.
 
+**Ray aiming.** Each ray is aimed at the stop: launched from the point of the paraxial entrance
+pupil whose real ray crosses the ghost's stop at the grid's point, times the paraxial marginal ray's
+height there - found by Broyden's method from the chief ray's Jacobian, to a billionth of the stop's
+radius. The paraxial pupil itself is not the real one: a fast lens's pupil aberrations make it
+overfill the stop (US 8,264,785's Example 4, at F/1.6, stops an axial ray at 0.97 of it), and at
+a wide field a ray launched at its centre can miss the stop's centre by much more. The real
+pupil's area, from 32 aimed rays around its rim, against the paraxial pupil's, is the light the stop
+lets in; it scales τ below. `--no-ray-aiming` launches the grid across the paraxial pupil instead.
+
 From the rays that arrive: the spot's **centroid**, its **RMS radius** σ about the centroid, its
-largest radius, the **share that got through** τ, and where the real chief ray lands. The
+largest radius, the **share that got through** τ - of the paraxial pupil's light: the share of rays
+that arrive times the real pupil's area - and where the real chief ray lands. The
 irradiance is the power that arrives over a disc of radius
 
     r_eff = max( √2·σ,  1.22 λ N / √τ ),
@@ -295,15 +305,16 @@ independent derivations: a sensor ghost between two flats against the lens's own
 twice across the gap (paraxially and by real rays, to 9 decimals); a diffraction order against the
 grating equation worked by hand; third-order crossings against real ones (within 1 %); defocused
 ghosts' real spots against their paraxial discs; efficiencies summing to one; the image circle and
-the sized apertures against the lens's own rays.
+the sized apertures against the lens's own rays. Each ghost is also checked against LensHH-LT,
+exported as a lens file and analysed there: see [verification](verification.md).
 
 ## Limits
 
 - **Rotationally symmetric lenses.** Tilts and decentres are not carried into the unfolded ghosts;
   catadioptric lenses (mirrors in the lens) are refused.
 - **One coated reflectance** for every glass-air surface, the same at every wavelength and angle.
-- **No ray aiming**: rays are launched at the paraxial entrance pupil. On a wide-angle lens the real
-  pupil can differ by a few per cent at the edge of the field.
+- **Evenly weighted rays.** Aimed, the grid is even over the stop; a pupil distorted in object space
+  sends a little more light through some parts of the stop than others, which is not weighted in.
 - **Brightness is an even disc** of the spot's RMS size, floored by the Airy disc - not a map of the
   spot's structure.
 - **Fields in one direction.** Each sweep runs along one line across the sensor; there is no

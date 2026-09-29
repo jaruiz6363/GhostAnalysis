@@ -15,9 +15,12 @@ what they look like.
   the sensor and brightness - Abd El-Maksoud and Sasian's paraxial ghost analysis, reproduced to
   every printed digit of their worked example.
 - **The sensor reflects**, as real sensors do - often the brightest ghosts there are.
-- **Real rays, across the field.** Each ghost's real spot at every field, stopped at the glass's
-  edges and the sensor's, ranked by its worst field - a bright source just outside the picture
-  included.
+- **Real rays, across the field.** Each ghost's real spot at every field, its rays aimed at its
+  real stop, stopped at the glass's edges and the sensor's, ranked by its worst field - a bright
+  source just outside the picture included.
+- **Checked ghost by ghost.** Each ghost can be written out as a lens file and analysed in another
+  program; against LensHH-LT, first order and real rays agree exactly
+  ([verification](docs/verification.md)).
 - **Ghosts that focus off axis.** Where a ghost's image surfaces cross the sensor, predicted from
   its Seidel sums and found by real rays, and where it is brightest, found by a fine scan.
 - **The sensor as a grating.** Given its pixel period, each sensor reflection diffracts into
@@ -54,6 +57,8 @@ ghost -i mylens.zmx --coated 0.005 --sensor-reflectance 0.2 --sensor 36x24 --sen
 - **[Examples](docs/examples.md)** - the papers' lens; a ghost that focuses off axis; a Cooke
   triplet; and six vehicle-camera lenses from US 8,264,785, with a diffracting sensor, an IR filter
   and cover glass, and stopped down.
+- **[Verification](docs/verification.md)** - how the numbers are checked: against the papers, by
+  independent derivation, and ghost by ghost against LensHH-LT.
 - **[References](docs/references.md)** - the papers and patents it rests on.
 - **[Building](BUILDING.md)** - installing .NET and building from source.
 

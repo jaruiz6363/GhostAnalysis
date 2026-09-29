@@ -58,7 +58,7 @@ ghost -i examples/Maksoud_ShortSensor.zmx --no-sensor --fields 0,0.5,1,1.5,2,2.5
 | Real crossing | 4.34° | 6.37° |
 
 The ghost is brightest between the axis and the tangential crossing - at 3.75°, found by the fine
-scan between the sweep's half-degree steps (`P` in the report) - at 1.46, 3.7 times its 0.39 on
+scan between the sweep's half-degree steps (`P` in the report) - at 1.45, 3.7 times its 0.39 on
 axis, its RMS spot 12.6 µm there against 24.6 µm on axis:
 
 ![G4,3 at 3.75°](images/short-sensor-G4-3.svg)
@@ -75,8 +75,8 @@ the blue and 25 in the red).
 
 | λ (µm) | ΔZ | Irradiance at 3.75° | RMS (µm) | Share |
 |---|---|---|---|---|
-| 0.4861 | +0.082 | 0.21 | 33.9 | 10 % |
-| 0.5876 | −0.940 | 1.46 | 12.6 | 71 % |
+| 0.4861 | +0.082 | 0.21 | 34.0 | 10 % |
+| 0.5876 | −0.940 | 1.45 | 12.6 | 71 % |
 | 0.6563 | −1.402 | 0.38 | 24.5 | 19 % |
 
 ## 3. A Cooke triplet across a 36 × 24 sensor
@@ -138,7 +138,7 @@ Things the tables do not say, settled against the lens itself:
 ### 4.2 The six designs
 
 ```bash
-ghost -i examples/US8264785/Ex4.zmx --coated 0.005 --sensor-reflectance 0.2 --wavelengths primary --layouts 2
+ghost -i examples/US8264785/Ex4.zmx --coated 0.005 --sensor-reflectance 0.2 --wavelengths primary --layouts 3
 ```
 
 (and so for each), coated at 0.5 %, the sensor reflecting 20 % - the patent's "several tens of
@@ -146,12 +146,12 @@ percent" - over its image circle:
 
 | Ex | θ | Last-surface sensor ghost (the one θ is about) | Its rank | Brightest ghost |
 |---|---|---|---|---|
-| 1 | 31.3° | 4.7 × 10⁻⁶ | 8th of 36 | G10,1, sensor → front surface, 1.5 × 10⁻⁴ |
-| 2 | 31.9° | 4.1 × 10⁻⁶ | 9th | G10,1, 1.3 × 10⁻⁴ |
-| 3 | 36.4° | 5.9 × 10⁻⁶ | 7th | G10,1, 1.2 × 10⁻⁴ |
-| 4 | 19.6° | 1.6 × 10⁻⁵ | 2nd | G9,8, inside the last element, 1.7 × 10⁻⁵ |
-| 5 | 21.9° | 1.5 × 10⁻⁵ | 3rd | G9,8, 4.0 × 10⁻⁵ |
-| 6 | 20.5° | 1.3 × 10⁻⁵ | 4th of 55 | G11,4, 4.5 × 10⁻⁵ |
+| 1 | 31.3° | 4.6 × 10⁻⁶ | 8th of 36 | G10,1, sensor → front surface, 1.5 × 10⁻⁴ |
+| 2 | 31.9° | 4.1 × 10⁻⁶ | 9th | G10,1, 1.2 × 10⁻⁴ |
+| 3 | 36.4° | 4.1 × 10⁻⁶ | 10th | G10,1, 1.3 × 10⁻⁴ |
+| 4 | 19.6° | 1.6 × 10⁻⁵ | 3rd | G8,7, in the air gap before the last element, 1.8 × 10⁻⁵ |
+| 5 | 21.9° | 1.5 × 10⁻⁵ | 3rd | G9,8, inside the last element, 4.4 × 10⁻⁵ |
+| 6 | 20.5° | 1.4 × 10⁻⁵ | 4th of 55 | G11,4, 4.6 × 10⁻⁵ |
 
 With θ ≥ 30° the last-surface ghost is weak and far down the list; at θ ≈ 20° it is about three
 times brighter and near the top. In the first family the worst sensor ghost is instead the one off
@@ -171,8 +171,8 @@ ghost -i examples/US8264785/Ex4.zmx --coated 0.005 --sensor-reflectance 0.2 --wa
 
 Each sensor ghost splits into orders - with the default fill factor the zeroth keeps 26 % of the
 reflected light, each first order about 10 % - turned by λ/Λ ≈ 0.1. But every order of these ghosts
-is a disc wider than the spacing between orders: the last-surface ghost's are 3.3-3.5 in radius,
-0.3-1.0 apart. At F/2-2.5 the grid smears into a veil; no dots.
+is a disc wider than the spacing between orders: the last-surface ghost's are 3.0-3.5 in radius,
+their centres about 0.45-0.6 apart. At F/2-2.5 the grid smears into a veil; no dots.
 
 ### 4.4 With an IR filter and a cover glass
 
@@ -185,21 +185,21 @@ the sensor and the filter 0.5 before it, coated like the lens, the image moved b
 ghost -i examples/US8264785/Ex1_plates.zmx --coated 0.005 --sensor-reflectance 0.2 --wavelengths primary --sensor-period 6 --layouts 1
 ```
 
-**The cover glass's rear face becomes the brightest ghost of every design**, 1.0-2.2 × 10⁻³ -
-25 to 100 times the brightest lens ghost - a flat face half a millimetre from the sensor sending the
+**The cover glass's rear face becomes the brightest ghost of every design**, 1.0-2.3 × 10⁻³ -
+25 to 110 times the brightest lens ghost - a flat face half a millimetre from the sensor sending the
 light straight back in a tight disc. θ cannot touch it: the plates have no curvature.
 
 ![Example 1's cover-glass ghost](images/us8264785-ex1-plates-cover.svg)
 
 Its diffraction orders are spaced by the plate face's distance from the sensor, 2Lλ/Λ with L its
-reduced distance (glass counted as thickness / n), in all six:
+reduced distance (glass counted as thickness / n), in all six (on axis, full aperture and F/8):
 
 | Face | Distance from sensor | Order spacing | 2Lλ/Λ |
 |---|---|---|---|
-| cover glass, rear | 0.5 air | 0.100-0.104 | 0.098 |
-| cover glass, front | + 0.5 glass | 0.166-0.170 | 0.163 |
-| IR filter, rear | + 0.5 air | 0.258-0.272 | 0.261 |
-| IR filter, front | + 0.7 glass | 0.355-0.364 | 0.351 |
+| cover glass, rear | 0.5 air | 0.099-0.102 | 0.098 |
+| cover glass, front | + 0.5 glass | 0.163-0.168 | 0.163 |
+| IR filter, rear | + 0.5 air | 0.262-0.269 | 0.261 |
+| IR filter, front | + 0.7 glass | 0.353-0.361 | 0.351 |
 
 ### 4.5 Stopped down to F/8
 
@@ -210,18 +210,18 @@ elements keep the apertures their full-aperture design needs, written into the f
 ghost -i examples/US8264785/Ex1_plates_F8.zmx --coated 0.005 --sensor-reflectance 0.2 --wavelengths primary --sensor-period 6 --layouts 1
 ```
 
-The orders' spacing stays; their discs shrink three to four times:
+The orders' spacing stays; their discs shrink three to four times (on axis):
 
 | Face | spacing ÷ disc diameter at F/2-2.5 | at F/8 |
 |---|---|---|
-| cover glass, rear | 0.18-0.27 | 0.80-0.83 |
-| cover glass, front | 0.19-0.31 | 0.80-0.86 |
-| IR filter, rear | 0.19-0.29 | 0.80-0.87 |
-| IR filter, front | 0.19-0.29 | 0.80-0.87 |
+| cover glass, rear | 0.19-0.25 | 0.74-0.79 |
+| cover glass, front | 0.19-0.25 | 0.75-0.79 |
+| IR filter, rear | 0.19-0.25 | 0.76-0.79 |
+| IR filter, front | 0.19-0.25 | 0.77-0.79 |
 
 The ratio is the same for every face of every lens: both the spacing and the disc grow with the
-face's distance, which cancels, leaving **spacing ÷ diameter ≈ N λ / Λ** - 0.78 at F/8, 0.24 at
-F/2.5, 0.20 at F/2. At F/8 the dots are distinct, neighbours still overlapping by a fifth of their
+face's distance, which cancels, leaving **spacing ÷ diameter ≈ N λ / Λ** - 0.78 at F/8, 0.24-0.25
+at F/2.5 (Examples 1 and 2), 0.19-0.21 at F/2. At F/8 the dots are distinct, neighbours still overlapping by a fifth of their
 width; they separate entirely beyond N = Λ/λ, which for a 6 µm period is F/10.2 at 0.588 µm,
 F/9.1 at 0.656 µm - and **F/6.4 at 940 nm**, where out-of-band coatings on the cover glass can make
 these ghosts very strong indeed.

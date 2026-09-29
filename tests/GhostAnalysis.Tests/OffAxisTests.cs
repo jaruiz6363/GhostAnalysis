@@ -64,7 +64,7 @@ public class OffAxisTests
         Assert.Equal(0.0, axis.CentroidY, 9);
         Assert.Equal(0.0, axis.CentroidX, 9);
         Assert.InRange(axis.RmsRadius / (axis.ParaxialRadius / Math.Sqrt(2)), 0.98, 1.02);
-        Assert.Equal(1.0, axis.Transmitted);
+        Assert.Equal(1.0, axis.Transmitted, 9);
 
         var near = At(g, 0.5);
         Assert.InRange(near.CentroidY / near.ParaxialCenter, 0.99, 1.01);
@@ -86,7 +86,7 @@ public class OffAxisTests
         Assert.Equal(0.0, At(g, 3.2).Irradiance);
         // Nothing is cut before the paraxial field stop allows.
         Assert.True(g.UnvignettedField > 1.0 && g.UnvignettedField < 2.0, $"{g.UnvignettedField}");
-        Assert.Equal(1.0, At(g, 1).Transmitted);
+        Assert.Equal(1.0, At(g, 1).Transmitted, 6);
     }
 
     [Fact]

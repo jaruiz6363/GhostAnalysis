@@ -63,8 +63,9 @@ and their weights, and the surfaces' semi-diameters.
   only field is on axis (some exports say `ANG 0`) is analysed on axis only unless `--fields` is
   given.
 - **Semi-diameters.** Where the file gives them, they are the edges of the glass. Where it gives
-  none, each surface gets the aperture needed to pass the lens's full beam at every field up to its
-  largest (method, section 9), and the report says which surfaces were sized so.
+  none, each surface gets the aperture needed to pass the lens's full beam, its rays aimed at its
+  stop, at every field up to its largest (method, section 9), and the report says which surfaces
+  were sized so.
 
 ## 3. Options
 
@@ -91,7 +92,8 @@ reflectance above 1 is refused.
 | `--field-extent <x>` | 1.2 | sweep to x times the lens's largest field |
 | `--field-steps <n>` | 12 | steps in the sweep |
 | `--wavelengths <list>` | the lens's | wavelengths in µm, each with an optional weight: `0.486,0.588,0.656` or `0.486:1,0.588:2,0.656:1`; `primary` for the lens's primary alone |
-| `--pupil <n>` | 21 | real rays across each ghost's pupil |
+| `--pupil <n>` | 21 | real rays across each ghost's pupil. A strongly aberrated spot, its rays crowded to the rim, wants more: 41 brings its RMS within a few tenths of a per cent ([verification](verification.md#33-aspheres-a-finite-object-and-wide-fields-us-8264785)) |
+| `--no-ray-aiming` | aimed | launch the real rays across the paraxial entrance pupil instead of aiming each at the stop - about three times faster, and on a fast or wide-angle lens a few per cent to tens of per cent wrong |
 | `--paraxial` | | no real rays: the papers' paraxial analysis only, much faster |
 
 ### The sensor
@@ -114,6 +116,8 @@ reflectance above 1 is refused.
 | `--layouts [n]` | 5 | draw the n brightest ghosts in the lens: an SVG each, and one HTML page with them all |
 | `--layout-dir <dir>` | beside `-o`, or here | where to write the drawings |
 | `--layout-field <f>` | each at its brightest | draw at this field the ghosts brightest there |
+| `--export-layouts <dir>` | | write each ghost's unfolded lens there (`<lens>_G4-3.lhlt`, ...), and every ghost's results, a row per ghost, field and wavelength, as `<lens>_ghosts.csv` - to check a ghost in another lens program ([verification](verification.md)) |
+| `--export-format <ext>` | `lhlt` | the unfolded lenses' format: `lhlt`, `zmx`, `seq`, `len`, `otx` or `json` |
 | `-h`, `--help` | | the option list |
 
 ## 4. Reading the report
@@ -153,7 +157,9 @@ and sagittal (S) foci reach the sensor, and where its third-order image surfaces
 
 **The brightest ghosts field by field** - for each: its field stop and unvignetted field, then per
 field the lens's image height, the ghost's paraxial centre, its real centroid, RMS and largest
-radius, the share of its rays that got through (Passed), its irradiance, and its real tangential and
+radius, the share of the light entering its paraxial pupil that arrives (Passed: the rays not
+vignetted, times the area of the real pupil its stop lets in, so a fast lens's unvignetted ghost
+shows a little under 1), its irradiance, and its real tangential and
 sagittal foci. A field marked `T` or `S` is a focus crossing; one marked `P` is where a fine scan
 found it brightest, between the sweep's fields.
 
@@ -233,12 +239,16 @@ ghost -i mylens.zmx --no-sensor --paraxial
 
 ## 7. Speed
 
-A two-reflection run on a lens of ten surfaces takes a few seconds. What makes it slower:
+A two-reflection run on a lens of ten surfaces takes a few seconds to a quarter of a minute. What
+makes it slower:
 
 - **Wavelengths**: each is a full analysis. `--wavelengths primary` for one.
 - **Diffraction**: each sensor ghost becomes up to 25 ghosts at `--orders 2`. `--orders 1` gives 9.
 - **Four reflections**: the count grows as about M⁴.
 - **The pupil grid**: `--pupil 11` for a quick look; the default 21 for the report.
+- **Ray aiming**: each real ray is searched for, a few traces as far as the stop, and costs about
+  three times an unaimed one. `--no-ray-aiming` for a quick look at a slow lens, where it changes
+  little.
 
 `--paraxial` skips the real rays entirely.
 
