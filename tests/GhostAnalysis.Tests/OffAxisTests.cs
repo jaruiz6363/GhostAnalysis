@@ -96,8 +96,9 @@ public class OffAxisTests
         var r = GhostAnalyzer.Analyze(lens, Lenses.Catalog, new GhostOptions { Fields = new[] { -2.0, 2.0 } });
         foreach (var g in r.Ghosts)
         {
-            Assert.Equal(-g.Fields[1].CentroidY, g.Fields[0].CentroidY, 9);
-            Assert.Equal(g.Fields[1].RmsRadius, g.Fields[0].RmsRadius, 9);
+            GhostField minus = At(g, -2.0), plus = At(g, 2.0);
+            Assert.Equal(-plus.CentroidY, minus.CentroidY, 9);
+            Assert.Equal(plus.RmsRadius, minus.RmsRadius, 9);
         }
     }
 

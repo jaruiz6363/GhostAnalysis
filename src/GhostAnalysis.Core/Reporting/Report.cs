@@ -61,29 +61,73 @@ public static class Report
         sb.AppendLine("  the image height (-1: mirrored through the centre). * stopped by a surface other than the lens's stop.");
         sb.AppendLine();
 
+        // The ghosts that come into focus on the sensor somewhere off axis. A third-order prediction
+        // far beyond the fields analysed says nothing: the theory does not hold out there.
+        double reach = 2.0 * (r.Fields.Count == 0 ? 0.0 : r.Fields.Max(Math.Abs));
+        double Near(double f) => double.IsFinite(f) && f <= reach ? f : double.NaN;
+        var focusing = r.Ranked.Where(g => g.Crossings.Count > 0
+                                        || double.IsFinite(Near(g.PredictedTangentialCrossing))
+                                        || double.IsFinite(Near(g.PredictedSagittalCrossing))).ToList();
+        sb.AppendLine("Ghosts that focus on the sensor off axis (tangential T, sagittal S):");
+        if (focusing.Count == 0) sb.AppendLine("  none");
+        else
+        {
+            sb.AppendLine("  Ghost          Real crossings                         Third-order prediction");
+            foreach (var g in focusing)
+            {
+                string real = g.Crossings.Count == 0
+                    ? (traced ? "none within the fields" : "(not traced)")
+                    : string.Join(", ", g.Crossings.Select(x =>
+                    {
+                        var at = g.Fields.FirstOrDefault(f => f.Marker == x.Kind && f.Field == x.Field);
+                        return F($"{x.Kind} {x.Field:0.###}") + (at != null && at.Transmitted <= 0 ? " (vignetted)" : "");
+                    }));
+                string predicted = string.Join(", ", new[]
+                {
+                    double.IsFinite(Near(g.PredictedTangentialCrossing)) ? F($"T {g.PredictedTangentialCrossing:0.###}") : null,
+                    double.IsFinite(Near(g.PredictedSagittalCrossing)) ? F($"S {g.PredictedSagittalCrossing:0.###}") : null,
+                }.Where(x => x != null));
+                sb.AppendLine($"  {g.Name,-12}   {real,-38} {(predicted.Length == 0 ? "none" : predicted)}");
+            }
+            sb.AppendLine($"  Fields in {unit}. Real: where the real foci either side of the ghost's chief ray reach the");
+            sb.AppendLine("  sensor; (vignetted) where none of the ghost's light gets there. Third order: where the");
+            sb.AppendLine("  ghost's image surfaces, from its Seidel sums, meet it, if within twice the fields analysed.");
+        }
+        sb.AppendLine();
+
         foreach (var g in r.Ranked.Take(detailed))
         {
             sb.AppendLine(F($"{g.Name}: field stop {(g.FieldStopSurface < 0 ? "none" : $"surface {g.FieldStopSurface}")}, unvignetted to {g.UnvignettedField:0.###} {unit}"));
             if (traced)
             {
-                sb.AppendLine("     Field      Image   Ghost par.  Centroid    Chief      RMS      Max   Passed    Irradiance");
+                sb.AppendLine("      Field      Image   Ghost par.  Centroid      RMS      Max   Passed    Irradiance   T focus   S focus");
                 foreach (var f in g.Fields)
-                    sb.AppendLine(F($"  {f.Field,8:0.###} {f.ImageHeight,10:0.0000} {f.ParaxialCenter,10:0.0000} {f.CentroidY,9:0.0000} {f.ChiefY,8:0.0000} {f.RmsRadius,8:0.0000} {f.MaxRadius,8:0.0000} {f.Transmitted,8:0.000} {f.Irradiance,13:0.000E+00}"));
+                    sb.AppendLine(F($"  {f.Marker ?? " "}{f.Field,8:0.###} {f.ImageHeight,10:0.0000} {f.ParaxialCenter,10:0.0000} {f.CentroidY,9:0.0000} {f.RmsRadius,8:0.0000} {f.MaxRadius,8:0.0000} {f.Transmitted,8:0.000} {f.Irradiance,13:0.000E+00} {f.TangentialFocus,9:0.000} {f.SagittalFocus,9:0.000}"));
             }
             else
             {
-                sb.AppendLine("     Field      Image      Ghost   Radius   Passed    Irradiance");
+                sb.AppendLine("     Field      Image      Ghost   Radius   Passed    Irradiance   T focus   S focus");
                 foreach (var f in g.Fields)
-                    sb.AppendLine(F($"  {f.Field,8:0.###} {f.ImageHeight,10:0.0000} {f.ParaxialCenter,10:0.0000} {f.ParaxialRadius,8:0.0000} {f.ParaxialTransmitted,8:0.000} {f.ParaxialIrradiance,13:0.000E+00}"));
+                    sb.AppendLine(F($"  {f.Field,8:0.###} {f.ImageHeight,10:0.0000} {f.ParaxialCenter,10:0.0000} {f.ParaxialRadius,8:0.0000} {f.ParaxialTransmitted,8:0.000} {f.ParaxialIrradiance,13:0.000E+00} {f.PredictedTangentialFocus,9:0.000} {f.PredictedSagittalFocus,9:0.000}"));
             }
             sb.AppendLine();
         }
-        if (traced && r.Ghosts.Count > 0)
+        if (r.Ghosts.Count > 0)
         {
-            sb.AppendLine("  Image: where the lens images the field. Ghost par.: the ghost's paraxial centre. Centroid,");
-            sb.AppendLine("  RMS and Max: its real spot. Chief: where its real chief ray lands. Passed: the share of rays");
-            sb.AppendLine("  not vignetted. Irradiance: its power over a disc of radius √2 × RMS (the radius of an even");
-            sb.AppendLine("  disc of that RMS), but no smaller than the Airy radius of its cone.");
+            if (traced)
+            {
+                sb.AppendLine("  Image: where the lens images the field. Ghost par.: the ghost's paraxial centre. Centroid,");
+                sb.AppendLine("  RMS and Max: its real spot. Passed: the share of rays not vignetted. Irradiance: its power");
+                sb.AppendLine("  over a disc of radius √2 × RMS (the radius of an even disc of that RMS), but no smaller than");
+                sb.AppendLine("  the Airy radius of its cone. T and S focus: how far short of the sensor its real tangential");
+                sb.AppendLine("  and sagittal foci fall (0: in focus on it). A field marked T or S is a crossing; one");
+                sb.AppendLine("  marked P is where a fine scan of the real spot over field found the ghost brightest.");
+            }
+            else
+            {
+                sb.AppendLine("  T and S focus: how far short of the sensor the ghost's tangential and sagittal foci fall,");
+                sb.AppendLine("  by its third-order image surfaces (0: in focus on it).");
+            }
             sb.AppendLine();
         }
 

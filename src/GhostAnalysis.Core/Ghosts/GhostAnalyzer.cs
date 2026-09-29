@@ -1,3 +1,4 @@
+using AberrationCalculator.Core.Aberrations;
 using AberrationCalculator.Core.Enums;
 using AberrationCalculator.Core.Glass;
 using AberrationCalculator.Core.Models;
@@ -266,9 +267,50 @@ public static class GhostAnalyzer
         double slope = Math.Abs(p.U[last - 1]);
         double airy = slope > 1e-15 ? 1.22 * c.Wavelength * 1e-3 / (2.0 * slope) : 0.0;
 
+        // Its image surfaces, by its own third-order sums: how far its tangential and sagittal
+        // foci stand short of its paraxial image at the reference field. They grow as the field
+        // squared, so a ghost focused short of the sensor on axis (ΔZ > 0) comes into focus on it
+        // off axis wherever its image surface curves back to meet it (2011, eqs. 23-25).
+        double deltaZ = toImage - p.ParaxialFocusDistance;
+        double sagT = double.NaN, sagS = double.NaN;
+        if (off != null)
+        {
+            var seidel = SeidelCoefficients.Compute(sys, n, n, n, off);
+            var surfaces = FieldSurfaces.Compute(sys, seidel, off, c.ReferenceField);
+            sagT = surfaces.TangentialSag;
+            sagS = surfaces.SagittalSag;
+        }
+        double predictedT = Crossing(c, deltaZ, sagT), predictedS = Crossing(c, deltaZ, sagS);
+
+        // The real crossings: where the real foci either side of the chief ray reach the sensor.
+        // And, because those foci speak only for the middle of the beam - a fast, aberrated ghost
+        // can have its chief ray's focus on the sensor and its spot no smaller for it - a fine scan
+        // of the real spot itself over field, for where the ghost is really brightest.
+        var crossings = new List<(double Field, string Kind)>();
+        var extra = new List<(double Field, string? Kind)>();
+        double top = c.Fields.Count == 0 ? 0.0 : c.Fields.Max();
+        if (c.Options.RealRays && top > 0)
+        {
+            crossings.AddRange(RealCrossings(sys, n, p, 0.0, top));
+            extra.AddRange(crossings.Select(x => (x.Field, (string?)x.Kind)));
+
+            const int scan = 120;
+            double best = -1, bestField = double.NaN;
+            for (int i = 0; i <= scan; i++)
+            {
+                double h = top * i / scan;
+                double e = Spot(sys, n, p, sd, ghostStop, h, power, airy, 11).Irradiance;
+                if (e > best) { best = e; bestField = h; }
+            }
+            if (best > 0 && !c.Fields.Contains(bestField)) extra.Add((bestField, "P"));
+        }
+
+        var fieldList = c.Fields.Select(h => (Field: h, Kind: (string?)null))
+                                .Concat(extra)
+                                .OrderBy(x => x.Field);
         var fields = new List<GhostField>();
-        foreach (double h in c.Fields)
-            fields.Add(AtField(c, layout, n, p, off, sd, ghostStop, h, power, radius, airy));
+        foreach (var (h, kind) in fieldList)
+            fields.Add(AtField(c, layout, n, p, off, sd, ghostStop, h, power, radius, airy, deltaZ, sagT, sagS, kind));
 
         return new Ghost
         {
@@ -287,23 +329,118 @@ public static class GhostAnalyzer
             Magnification = magnification,
             FieldStopLayoutSurface = fieldStop,
             UnvignettedField = unvignetted,
+            PredictedTangentialCrossing = predictedT,
+            PredictedSagittalCrossing = predictedS,
+            Crossings = crossings,
             Fields = fields,
         };
+    }
+
+    /// <summary>
+    /// The field at which a focal surface standing <paramref name="sag"/> short of the ghost's
+    /// paraxial image at the reference field meets the sensor, <paramref name="deltaZ"/> beyond
+    /// that image: ΔZ + sag s^2 = 0, s the field as a fraction of the reference. NaN if never.
+    /// </summary>
+    private static double Crossing(Context c, double deltaZ, double sag)
+    {
+        if (double.IsNaN(sag) || Math.Abs(sag) < 1e-300) return double.NaN;
+        double s2 = -deltaZ / sag;
+        return s2 > 0 ? FieldFromRatio(c, Math.Sqrt(s2)) : double.NaN;
+    }
+
+    /// <summary>The chief ray's starting slope (angle fields: its tangent) or height, as a fraction of the reference field's.</summary>
+    private static double RatioFromField(Context c, double h) =>
+        c.ReferenceField <= 0 ? 0.0
+        : c.Lens.FieldType == FieldType.ObjectAngle
+            ? Math.Tan(h * Math.PI / 180.0) / Math.Tan(c.ReferenceField * Math.PI / 180.0)
+            : h / c.ReferenceField;
+
+    private static double FieldFromRatio(Context c, double s) =>
+        c.Lens.FieldType == FieldType.ObjectAngle
+            ? Math.Atan(s * Math.Tan(c.ReferenceField * Math.PI / 180.0)) * 180.0 / Math.PI
+            : s * c.ReferenceField;
+
+    /// <summary>
+    /// Where the ghost's real light comes to a focus at one field, from the sensor, positive when
+    /// short of it: the crossing of two real rays either side of the chief ray - in the field's
+    /// plane for the tangential focus, across it for the sagittal - Coddington's foci, traced.
+    /// NaN where the rays do not arrive or run parallel.
+    /// </summary>
+    public static (double Tangential, double Sagittal) RealFoci(OpticalSystem sys, double[] n, ParaxialResult p, double field)
+    {
+        const double d = 1e-3;
+        var up = RealRayTrace.TraceRecord(sys, n, p, field, d, 0.0, atParaxialFocus: false)[^1];
+        var down = RealRayTrace.TraceRecord(sys, n, p, field, -d, 0.0, atParaxialFocus: false)[^1];
+        var right = RealRayTrace.TraceRecord(sys, n, p, field, 0.0, d, atParaxialFocus: false)[^1];
+        var left = RealRayTrace.TraceRecord(sys, n, p, field, 0.0, -d, atParaxialFocus: false)[^1];
+
+        // Two rays at heights y1, y2 on the sensor with slopes t1, t2 meet at z = -(y1 - y2)/(t1 - t2)
+        // from it; short of it is -z.
+        static double Meet(double a, double b, double ta, double tb) =>
+            Math.Abs(ta - tb) > 1e-15 ? (a - b) / (ta - tb) : double.PositiveInfinity;
+
+        double t = up.Ok && down.Ok ? Meet(up.Y, down.Y, up.M / up.N, down.M / down.N) : double.NaN;
+        double s = right.Ok && left.Ok ? Meet(right.X, left.X, right.L / right.N, left.L / left.N) : double.NaN;
+        return (t, s);
+    }
+
+    /// <summary>
+    /// The fields between <paramref name="from"/> and <paramref name="to"/> at which the ghost's real
+    /// tangential or sagittal focus is on the sensor: a fine scan for a change of sign, each then
+    /// closed by bisection. Found by real rays, so a crossing the third order misses is found too.
+    /// </summary>
+    public static IEnumerable<(double Field, string Kind)> RealCrossings(OpticalSystem sys, double[] n, ParaxialResult p,
+                                                                         double from, double to, int steps = 120)
+    {
+        var found = new List<(double, string)>();
+        var foci = new (double T, double S)[steps + 1];
+        var h = new double[steps + 1];
+        for (int i = 0; i <= steps; i++)
+        {
+            h[i] = from + (to - from) * i / steps;
+            foci[i] = RealFoci(sys, n, p, h[i]);
+        }
+        foreach (var kind in new[] { "T", "S" })
+        {
+            Func<(double T, double S), double> pick = kind == "T" ? f => f.T : f => f.S;
+            for (int i = 0; i < steps; i++)
+            {
+                double a = pick(foci[i]), b = pick(foci[i + 1]);
+                if (!double.IsFinite(a) || !double.IsFinite(b) || Math.Sign(a) == Math.Sign(b) || a == 0) continue;
+                double lo = h[i], hi = h[i + 1], flo = a;
+                bool ok = true;
+                for (int k = 0; k < 60; k++)
+                {
+                    double mid = 0.5 * (lo + hi);
+                    double fm = pick(RealFoci(sys, n, p, mid));
+                    if (!double.IsFinite(fm)) { ok = false; break; }
+                    if (Math.Sign(fm) == Math.Sign(flo)) { lo = mid; flo = fm; } else hi = mid;
+                }
+                // A focus also changes sign by passing through infinity, where the ghost's rays
+                // leave parallel; that is no crossing, and there the focus distance grows instead
+                // of vanishing.
+                double at = 0.5 * (lo + hi);
+                double end = pick(RealFoci(sys, n, p, at));
+                if (ok && double.IsFinite(end) && Math.Abs(end) < 1e-6 * (Math.Abs(a) + Math.Abs(b)))
+                    found.Add((at, kind));
+            }
+        }
+        return found.OrderBy(x => x.Item1);
     }
 
     /// <summary>The ghost at one field: paraxially, and by real rays when asked.</summary>
     private static GhostField AtField(Context c, GhostLayout layout, double[] n, ParaxialResult p,
                                       ParaxialResult? off, double[] sd, int ghostStop, double h,
-                                      double power, double radius, double airy)
+                                      double power, double radius, double airy,
+                                      double deltaZ, double sagT, double sagS, string? crossing)
     {
         var sys = layout.System;
         int last = sys.Surfaces.Count - 1;
         // Linear in the chief ray's starting slope or height: the tangent of an angle field.
-        double s = c.ReferenceField <= 0 ? 0.0
-                 : c.Lens.FieldType == FieldType.ObjectAngle
-                     ? Math.Tan(h * Math.PI / 180.0) / Math.Tan(c.ReferenceField * Math.PI / 180.0)
-                     : h / c.ReferenceField;
+        double s = RatioFromField(c, h);
         bool onAxis = Math.Abs(h) < 1e-15;
+        double predictedT = deltaZ + (onAxis ? 0.0 : sagT * s * s);
+        double predictedS = deltaZ + (onAxis ? 0.0 : sagS * s * s);
 
         // Paraxially the beam at each surface is a disc of the marginal ray's radius about the
         // chief ray; what fraction of it the surface's aperture passes, at the worst surface.
@@ -329,11 +466,37 @@ public static class GhostAnalyzer
             {
                 Field = h, ImageHeight = imageHeight, ParaxialCenter = center, ParaxialRadius = radius,
                 ParaxialTransmitted = passed, ParaxialIrradiance = paraxialIrradiance, Traced = false,
+                PredictedTangentialFocus = predictedT, PredictedSagittalFocus = predictedS,
             };
         }
+        var (focusT, focusS) = RealFoci(sys, n, p, h);
+        var spot = Spot(sys, n, p, sd, ghostStop, h, power, airy, c.Options.PupilSamples);
+        var chief = Arrive(sys, n, p, sd, ghostStop, h, 0.0, 0.0);
 
-        // Real rays: a square grid across the ghost's entrance pupil, those inside it traced.
-        int m = Math.Max(3, c.Options.PupilSamples | 1);           // odd, so the chief ray is on it
+        return new GhostField
+        {
+            Field = h, ImageHeight = imageHeight, ParaxialCenter = center, ParaxialRadius = radius,
+            ParaxialTransmitted = passed, ParaxialIrradiance = paraxialIrradiance, Traced = true,
+            Transmitted = spot.Transmitted, CentroidX = spot.X, CentroidY = spot.Y,
+            ChiefY = chief?.Y ?? double.NaN, RmsRadius = spot.Rms, MaxRadius = spot.Max,
+            EffectiveRadius = spot.Effective, Irradiance = spot.Irradiance,
+            PredictedTangentialFocus = predictedT, PredictedSagittalFocus = predictedS,
+            TangentialFocus = focusT, SagittalFocus = focusS, Marker = crossing,
+        };
+    }
+
+    private readonly record struct SpotResult(double Transmitted, double X, double Y, double Rms, double Max,
+                                              double Effective, double Irradiance);
+
+    /// <summary>
+    /// The ghost's real spot at one field: a square grid of <paramref name="across"/> rays across
+    /// its entrance pupil, those inside the pupil traced. Its irradiance is the power that
+    /// arrives over a disc of √2 × its RMS radius, no smaller than the Airy disc.
+    /// </summary>
+    private static SpotResult Spot(OpticalSystem sys, double[] n, ParaxialResult p, double[] sd, int ghostStop,
+                                   double h, double power, double airy, int across)
+    {
+        int m = Math.Max(3, across | 1);           // odd, so the chief ray is on it
         int launched = 0, arrived = 0;
         double sx = 0, sy = 0, sxx = 0, syy = 0;
         var xs = new List<double>();
@@ -354,29 +517,16 @@ public static class GhostAnalyzer
                 sx += x; sy += y; sxx += x * x; syy += y * y;
             }
         }
-        var chief = Arrive(sys, n, p, sd, ghostStop, h, 0.0, 0.0);
 
         double transmitted = launched > 0 ? (double)arrived / launched : 0.0;
-        double cx = double.NaN, cy = double.NaN, rms = double.NaN, max = double.NaN, effective = double.NaN, lit = 0.0;
-        if (arrived > 0)
-        {
-            cx = sx / arrived;
-            cy = sy / arrived;
-            rms = Math.Sqrt(Math.Max(0.0, (sxx + syy) / arrived - cx * cx - cy * cy));
-            max = 0.0;
-            for (int k = 0; k < xs.Count; k++) max = Math.Max(max, Math.Sqrt((xs[k] - cx) * (xs[k] - cx) + (ys[k] - cy) * (ys[k] - cy)));
-            effective = Math.Max(Math.Sqrt(2.0) * rms, airy);
-            lit = effective > 0 ? power * transmitted / (Math.PI * effective * effective) : double.PositiveInfinity;
-        }
-
-        return new GhostField
-        {
-            Field = h, ImageHeight = imageHeight, ParaxialCenter = center, ParaxialRadius = radius,
-            ParaxialTransmitted = passed, ParaxialIrradiance = paraxialIrradiance, Traced = true,
-            Transmitted = transmitted, CentroidX = cx, CentroidY = cy,
-            ChiefY = chief?.Y ?? double.NaN, RmsRadius = rms, MaxRadius = max,
-            EffectiveRadius = effective, Irradiance = lit,
-        };
+        if (arrived == 0) return new SpotResult(0.0, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, 0.0);
+        double cx = sx / arrived, cy = sy / arrived;
+        double rms = Math.Sqrt(Math.Max(0.0, (sxx + syy) / arrived - cx * cx - cy * cy));
+        double max = 0.0;
+        for (int k = 0; k < xs.Count; k++) max = Math.Max(max, Math.Sqrt((xs[k] - cx) * (xs[k] - cx) + (ys[k] - cy) * (ys[k] - cy)));
+        double effective = Math.Max(Math.Sqrt(2.0) * rms, airy);
+        double lit = effective > 0 ? power * transmitted / (Math.PI * effective * effective) : double.PositiveInfinity;
+        return new SpotResult(transmitted, cx, cy, rms, max, effective, lit);
     }
 
     /// <summary>

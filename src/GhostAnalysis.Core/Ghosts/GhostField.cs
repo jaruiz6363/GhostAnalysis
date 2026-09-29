@@ -66,6 +66,32 @@ public sealed class GhostField
     /// <summary>The ghost's power at this field over its effective disc, per unit area.</summary>
     public double Irradiance { get; init; }
 
+    // ── Focus ────────────────────────────────────────────────────────────────────
+    // Distances from the sensor to where the ghost's light comes to a focus, positive when it
+    // focuses short of the sensor, as ΔZ is. Tangential: the rays in the plane of the field;
+    // sagittal: across it. Zero is a ghost in focus on the sensor.
+
+    /// <summary>
+    /// The tangential focus by third-order theory: ΔZ plus the ghost's tangential field
+    /// curvature, (3 S_III + S_IV) / (2 n' u'^2) at this field (2011, eqs. 10 and 23).
+    /// </summary>
+    public double PredictedTangentialFocus { get; init; } = double.NaN;
+
+    /// <summary>The sagittal focus by third-order theory, with (S_III + S_IV) / (2 n' u'^2).</summary>
+    public double PredictedSagittalFocus { get; init; } = double.NaN;
+
+    /// <summary>The real tangential focus: where two real rays either side of the chief ray, in the field's plane, cross.</summary>
+    public double TangentialFocus { get; init; } = double.NaN;
+
+    /// <summary>The real sagittal focus, from two rays either side of the chief ray across the field's plane.</summary>
+    public double SagittalFocus { get; init; } = double.NaN;
+
+    /// <summary>
+    /// Why this field was added to the sweep: "T" or "S" where the ghost's real tangential or sagittal
+    /// focus crosses the sensor, "P" where a fine scan of the real spot found the ghost brightest.
+    /// </summary>
+    public string? Marker { get; init; }
+
     /// <summary>The irradiance this field is ranked by: the real one when traced, otherwise the paraxial.</summary>
     public double Brightness => Traced ? Irradiance : ParaxialIrradiance;
 

@@ -110,7 +110,21 @@ public sealed class Ghost
     /// <summary>The largest field the ghost passes unvignetted, paraxially; infinite if nothing cuts it.</summary>
     public required double UnvignettedField { get; init; }
 
-    /// <summary>The ghost at each field analysed, from the axis out.</summary>
+    /// <summary>
+    /// The fields at which third-order theory puts the ghost's tangential and sagittal image
+    /// surfaces on the sensor (2011, eqs. 24 and 25), where it is in focus off axis though it may
+    /// be far out of focus on it. NaN where the surface curves away from the sensor.
+    /// </summary>
+    public required double PredictedTangentialCrossing { get; init; }
+    public required double PredictedSagittalCrossing { get; init; }
+
+    /// <summary>
+    /// The fields, within those analysed, at which the ghost's real tangential or sagittal focus
+    /// is on the sensor, from the axis out.
+    /// </summary>
+    public required IReadOnlyList<(double Field, string Kind)> Crossings { get; init; }
+
+    /// <summary>The ghost at each field analysed, from the axis out, with its crossings among them.</summary>
     public required IReadOnlyList<GhostField> Fields { get; init; }
 
     /// <summary>The field at which the ghost is brightest, and so worst.</summary>

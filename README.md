@@ -45,8 +45,24 @@ The method is Abd El-Maksoud and Sasian's paraxial ghost analysis:
    smaller than the Airy disc of its cone. This is where a ghost that is out of focus on axis
    is found to focus on the sensor off axis.
 
+8. **Where it focuses off axis.** A ghost out of focus on axis can be in focus off it, where
+   its curved image surfaces meet the sensor (2011, section 12). Its own Seidel sums give its
+   tangential and sagittal image surfaces, and so the fields where they cross the sensor -
+   the prediction. Real rays either side of its chief ray give its real tangential and
+   sagittal foci at any field; a fine scan and bisection find where each is exactly on the
+   sensor - the crossings - and the spot is traced there too.
+9. **Where it is brightest.** The foci next to the chief ray speak for the middle of the beam
+   only; a fast, aberrated ghost can have them on the sensor and its spot no smaller. So the
+   real spot itself is scanned finely over field, and traced in full where it is brightest,
+   wherever that falls between the fields of the sweep.
+
 The fields are swept from the axis to 1.2 times the lens's largest field - a bright source just
 outside the picture still sends its ghosts into it - and each ghost is ranked by its worst field.
+
+The paper's lens with its sensor moved to 43.0 behind the plate, just short of the plate ghost
+G4,3's focus, is the test of this: the third order puts its tangential and sagittal surfaces on
+the sensor at 4.33 and 6.33 degrees, real rays at 4.34 and 6.37, and the ghost is brightest at
+3.75 degrees, nearly four times as bright as on axis.
 
 ## Validation
 
@@ -87,9 +103,9 @@ axis unless `--fields` is given.
 
 ## Not yet
 
-- Where the ghosts' image surfaces cross the sensor, from their aberration coefficients (2011,
-  section 12) - a quick predictor of what the real rays find.
 - More than one wavelength.
+- Image surfaces beyond third order, from AberrationCalculator's fifth- and seventh-order
+  coefficients.
 - Diffraction by the sensor: the pixel array is a reflective grating, so each reflection from
   the sensor sends light into orders (m, n), each a copy of the ghost displaced on the sensor.
 
