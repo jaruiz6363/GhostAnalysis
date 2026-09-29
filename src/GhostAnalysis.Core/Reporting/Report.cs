@@ -1,19 +1,27 @@
 using System.Globalization;
 using System.Text;
+using AberrationCalculator.Core.Enums;
 using GhostAnalysis.Core.Ghosts;
 
 namespace GhostAnalysis.Core.Reporting;
 
-/// <summary>The ghosts of a lens as text: the brightest first, then each one's first order.</summary>
+/// <summary>
+/// The ghosts of a lens as text: the brightest at its worst field first, then the brightest
+/// ones field by field, then each one's first order.
+/// </summary>
 public static class Report
 {
     private static readonly CultureInfo C = CultureInfo.InvariantCulture;
 
-    public static string Write(GhostResult r)
+    /// <param name="detailed">How many of the brightest ghosts to show field by field.</param>
+    public static string Write(GhostResult r, int detailed = 5)
     {
         var sb = new StringBuilder();
         var lens = r.Lens;
         int image = lens.Surfaces.Count - 1;
+        string unit = lens.FieldType == FieldType.ObjectAngle ? "deg" : "(object height)";
+        bool traced = r.Options.RealRays;
+
         sb.AppendLine($"Ghost analysis: {lens.Title}");
         sb.AppendLine();
         sb.AppendLine(F($"Wavelength:        {r.Wavelength:0.######} um"));
@@ -26,7 +34,11 @@ public static class Report
         sb.AppendLine(r.Options.ImageReflects
             ? F($"Sensor:            surface {image}, R = {r.Options.ImageReflectance:0.####} (a setting: no lens file gives it)")
             : "Sensor:            not reflecting");
-        sb.AppendLine(F($"Power entering:    {r.Options.InputPower:G4}"));
+        sb.AppendLine(F($"Power entering:    {r.Options.InputPower:G4}, the same at every field"));
+        sb.AppendLine($"Fields:            {string.Join(", ", r.Fields.Select(f => f.ToString("0.###", C)))} {unit}");
+        sb.AppendLine(traced
+            ? $"Spots:             real rays, a {r.Options.PupilSamples | 1}-across grid over each ghost's entrance pupil"
+            : "Spots:             paraxial only");
         if (r.Unresolved.Count > 0)
             sb.AppendLine($"WARNING: glasses the catalogs lack, traced as air: {string.Join(", ", r.Unresolved)}");
         sb.AppendLine();
@@ -36,22 +48,53 @@ public static class Report
             if (r.Reflectance[k] > 0) sb.AppendLine(F($"  {k,3}  {r.Reflectance[k]:0.000000}{(k == image ? "  (sensor)" : "")}"));
         sb.AppendLine();
 
-        sb.AppendLine($"{r.Ghosts.Count} ghosts, brightest at the image first:");
-        sb.AppendLine("  Ghost          Irradiance       Power   Radius at image       ΔZ   Stop");
+        sb.AppendLine($"{r.Ghosts.Count} ghosts, brightest at their worst field first:");
+        sb.AppendLine("  Ghost          Peak irrad.   at field   on sensor      Radius    Axis irrad.       ΔZ     Mag   Stop");
         foreach (var g in r.Ranked)
-            sb.AppendLine(F($"  {g.Name,-12} {g.Irradiance,12:0.000E+00} {g.Power,11:0.000E+00} {Math.Abs(g.MarginalAtImage),17:0.0000} {g.DeltaZ,10:0.0000}   {g.StopSurface}{(g.Anomalous ? " *" : "")}"));
-        if (r.Ghosts.Any(g => g.Anomalous))
-            sb.AppendLine("  * stopped by a surface other than the lens's own stop");
+        {
+            var p = g.Peak;
+            double rad = p == null ? Math.Abs(g.MarginalAtImage) : p.Traced && p.Transmitted > 0 ? p.EffectiveRadius : p.ParaxialRadius;
+            sb.AppendLine(F($"  {g.Name,-12} {g.PeakIrradiance,12:0.000E+00} {p?.Field ?? 0,10:0.###} {p?.Position ?? 0,11:0.0000} {rad,11:0.0000} {g.Irradiance,14:0.000E+00} {g.DeltaZ,9:0.000} {g.Magnification,7:0.000}   {g.StopSurface}{(g.Anomalous ? " *" : "")}"));
+        }
+        sb.AppendLine("  Peak irradiance at the field where the ghost is brightest, landing 'on sensor' there with that");
+        sb.AppendLine("  radius; Axis irrad. and ΔZ on axis, paraxially; Mag is where the ghost lands as a multiple of");
+        sb.AppendLine("  the image height (-1: mirrored through the centre). * stopped by a surface other than the lens's stop.");
         sb.AppendLine();
 
-        sb.AppendLine("First order of each ghost (Abd El-Maksoud and Sasian's quantities):");
+        foreach (var g in r.Ranked.Take(detailed))
+        {
+            sb.AppendLine(F($"{g.Name}: field stop {(g.FieldStopSurface < 0 ? "none" : $"surface {g.FieldStopSurface}")}, unvignetted to {g.UnvignettedField:0.###} {unit}"));
+            if (traced)
+            {
+                sb.AppendLine("     Field      Image   Ghost par.  Centroid    Chief      RMS      Max   Passed    Irradiance");
+                foreach (var f in g.Fields)
+                    sb.AppendLine(F($"  {f.Field,8:0.###} {f.ImageHeight,10:0.0000} {f.ParaxialCenter,10:0.0000} {f.CentroidY,9:0.0000} {f.ChiefY,8:0.0000} {f.RmsRadius,8:0.0000} {f.MaxRadius,8:0.0000} {f.Transmitted,8:0.000} {f.Irradiance,13:0.000E+00}"));
+            }
+            else
+            {
+                sb.AppendLine("     Field      Image      Ghost   Radius   Passed    Irradiance");
+                foreach (var f in g.Fields)
+                    sb.AppendLine(F($"  {f.Field,8:0.###} {f.ImageHeight,10:0.0000} {f.ParaxialCenter,10:0.0000} {f.ParaxialRadius,8:0.0000} {f.ParaxialTransmitted,8:0.000} {f.ParaxialIrradiance,13:0.000E+00}"));
+            }
+            sb.AppendLine();
+        }
+        if (traced && r.Ghosts.Count > 0)
+        {
+            sb.AppendLine("  Image: where the lens images the field. Ghost par.: the ghost's paraxial centre. Centroid,");
+            sb.AppendLine("  RMS and Max: its real spot. Chief: where its real chief ray lands. Passed: the share of rays");
+            sb.AppendLine("  not vignetted. Irradiance: its power over a disc of radius √2 × RMS (the radius of an even");
+            sb.AppendLine("  disc of that RMS), but no smaller than the Airy radius of its cone.");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("First order of each ghost:");
         sb.AppendLine("  Ghost             f_E        BFD         d'     y'_g,n       D_ep      L'_g    L'_g,n      D_xp       f/#");
         foreach (var g in r.Ghosts)
             sb.AppendLine(F($"  {g.Name,-12} {g.Efl,10:0.0000} {g.Bfd,10:0.0000} {g.RearPrincipalPlane,10:0.0000} {g.MarginalAtImage,10:0.0000} {g.EntrancePupilDiameter,10:0.0000} {g.ExitPupilToGhostImage,9:0.0000} {g.ExitPupilToImage,9:0.0000} {g.ExitPupilDiameter,9:0.0000} {g.FNumber,9:0.0000}"));
         sb.AppendLine();
         sb.AppendLine("  BFD and d' from the last surface; ΔZ from the ghost's image to the lens's, positive when the");
         sb.AppendLine("  ghost focuses short of it; L' from the ghost's exit pupil to the ghost's image (L'_g) and to the");
-        sb.AppendLine("  lens's image (L'_g,n). Irradiance is the ghost's power spread evenly over its disc at the image.");
+        sb.AppendLine("  lens's image (L'_g,n).");
         return sb.ToString();
     }
 

@@ -20,7 +20,16 @@ public static class Program
         "  --sensor-reflectance <R>      the sensor's reflectance (default 0.05)\n" +
         "  --no-sensor                   the sensor does not reflect, as in the papers\n" +
         "  --coated <R>                  every glass-air surface reflects R (default: uncoated Fresnel)\n" +
-        "  --power <P>                   power entering the lens (default 1)\n";
+        "  --power <P>                   power entering the lens (default 1)\n" +
+        "  --fields <f1,f2,...>          the fields to analyse, in the lens's field units\n" +
+        "                                (default: the axis to 1.2 x the lens's largest field, in 12 steps)\n" +
+        "  --field-extent <x>            sweep to x times the lens's largest field (default 1.2)\n" +
+        "  --field-steps <n>             steps in the sweep (default 12)\n" +
+        "  --pupil <n>                   rays across each ghost's pupil (default 21)\n" +
+        "  --paraxial                    no real rays: the papers' paraxial analysis only\n" +
+        "  --detail <n>                  show the n brightest ghosts field by field (default 5)\n" +
+        "\n" +
+        "Reflectances are fractions: 0.1 is 10%.\n";
 
     public static int Main(string[] args)
     {
@@ -30,7 +39,10 @@ public static class Program
             int reflections = 2;
             double sensor = 0.05, power = 1.0;
             double? coated = null;
-            bool noSensor = false;
+            bool noSensor = false, paraxial = false;
+            List<double>? fields = null;
+            double extent = 1.2;
+            int steps = 12, pupil = 21, detail = 5;
             for (int i = 0; i < args.Length; i++)
             {
                 string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value.");
@@ -43,6 +55,15 @@ public static class Program
                     case "--no-sensor": noSensor = true; break;
                     case "--coated": coated = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--power": power = double.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--fields":
+                        fields = Next().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                       .Select(f => double.Parse(f, CultureInfo.InvariantCulture)).ToList();
+                        break;
+                    case "--field-extent": extent = double.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--field-steps": steps = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--pupil": pupil = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--paraxial": paraxial = true; break;
+                    case "--detail": detail = int.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "-h": case "--help": Console.WriteLine(Usage); return 0;
                     default: throw new ArgumentException($"'{args[i]}' is not an option.");
                 }
@@ -58,8 +79,13 @@ public static class Program
                 ImageReflectance = sensor,
                 CoatedReflectance = coated,
                 InputPower = power,
+                Fields = fields,
+                FieldExtent = extent,
+                FieldSteps = steps,
+                PupilSamples = pupil,
+                RealRays = !paraxial,
             });
-            string report = Report.Write(result);
+            string report = Report.Write(result, detail);
             Console.Write(report);
             if (output != null)
             {

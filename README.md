@@ -30,8 +30,23 @@ The method is Abd El-Maksoud and Sasian's paraxial ghost analysis:
    fills most, height over semi-diameter, is the ghost's aperture stop. It need not be the
    lens's own (the report marks those with `*`).
 5. **Its light.** What enters the ghost's pupil, times a Fresnel transmittance at every
-   surface crossed and a reflectance at every reflection, spread evenly over the ghost's disc
-   at the image. Uncoated by default; `--coated R` gives every glass-air surface reflectance R.
+   surface crossed and a reflectance at every reflection, spread over the area the ghost
+   covers on the sensor. Uncoated by default; `--coated R` gives every glass-air surface
+   reflectance R.
+6. **Off axis, paraxially.** The ghost's chief ray, through the centre of its own stop, puts
+   the centre of its disc on the sensor - at a fixed multiple of the image height, its
+   magnification (-1 is a ghost mirrored through the centre). The surface that first cuts its
+   beam as the field grows is its field stop, and at each field the share of its beam every
+   surface passes gives its vignetting.
+7. **Off axis, by real rays.** A grid of real rays across the ghost's entrance pupil is traced
+   through the unfolded ghost to the sensor, each ray stopped where it misses a surface's
+   semi-diameter. Where the ghost really lands, its real spot size and how much of it gets
+   through come from those; the irradiance is its power over a disc of √2 × its RMS radius, no
+   smaller than the Airy disc of its cone. This is where a ghost that is out of focus on axis
+   is found to focus on the sensor off axis.
+
+The fields are swept from the axis to 1.2 times the lens's largest field - a bright source just
+outside the picture still sends its ghosts into it - and each ghost is ranked by its worst field.
 
 ## Validation
 
@@ -60,12 +75,21 @@ ghost -i lens.len --no-sensor -n 4
 | `--no-sensor` | the sensor does not reflect, as in the papers |
 | `--coated R` | every glass-air surface reflects R (default: uncoated Fresnel) |
 | `--power P` | power entering the lens (default 1) |
+| `--fields f1,f2,...` | the fields to analyse, in the lens's field units |
+| `--field-extent x` | sweep to x times the lens's largest field (default 1.2) |
+| `--field-steps n` | steps in the sweep (default 12) |
+| `--pupil n` | real rays across each ghost's pupil (default 21) |
+| `--paraxial` | no real rays: the papers' paraxial analysis only |
+| `--detail n` | show the n brightest ghosts field by field (default 5) |
+
+Reflectances are fractions: 0.1 is 10%. A lens file whose only field is on axis is analysed on
+axis unless `--fields` is given.
 
 ## Not yet
 
-- Off-axis ghosts: the ghost's own chief ray, field stop and windows, and where its image
-  surfaces cross the sensor (2011, section 12).
-- The ghosts' aberrations, through seventh order, and their real-ray spots.
+- Where the ghosts' image surfaces cross the sensor, from their aberration coefficients (2011,
+  section 12) - a quick predictor of what the real rays find.
+- More than one wavelength.
 - Diffraction by the sensor: the pixel array is a reflective grating, so each reflection from
   the sensor sends light into orders (m, n), each a copy of the ghost displaced on the sensor.
 

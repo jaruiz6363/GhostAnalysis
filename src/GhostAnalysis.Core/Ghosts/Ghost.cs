@@ -84,8 +84,38 @@ public sealed class Ghost
     public required double Power { get; init; }
 
     /// <summary>
-    /// The ghost's irradiance at the lens's image plane: its power over its area there, spread
-    /// evenly (2011, eq. 17). Infinite for a ghost focused exactly on the image.
+    /// The ghost's irradiance at the lens's image plane on axis: its power over its area there,
+    /// spread evenly (2011, eq. 17). Infinite for a ghost focused exactly on the image.
     /// </summary>
     public required double Irradiance { get; init; }
+
+    // ── Off axis ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Where the ghost lands for a field, as a multiple of where the lens images it:
+    /// ȳ'_g,n / ȳ'_n. Paraxially the same at every field. Near 1 the ghost sits on the image;
+    /// near -1 it is mirrored through the centre of the sensor. NaN when it cannot be traced.
+    /// </summary>
+    public required double Magnification { get; init; }
+
+    /// <summary>
+    /// The layout surface that first cuts into the ghost's beam off axis, its field stop (2009,
+    /// section 6): largest |ȳ| / (a - |y|). -1 if no surface with an aperture does.
+    /// </summary>
+    public required int FieldStopLayoutSurface { get; init; }
+
+    /// <summary>The lens surface that is.</summary>
+    public int FieldStopSurface => FieldStopLayoutSurface < 0 ? -1 : Layout.Origin[FieldStopLayoutSurface];
+
+    /// <summary>The largest field the ghost passes unvignetted, paraxially; infinite if nothing cuts it.</summary>
+    public required double UnvignettedField { get; init; }
+
+    /// <summary>The ghost at each field analysed, from the axis out.</summary>
+    public required IReadOnlyList<GhostField> Fields { get; init; }
+
+    /// <summary>The field at which the ghost is brightest, and so worst.</summary>
+    public GhostField? Peak => Fields.Count == 0 ? null : Fields.MaxBy(f => f.Brightness);
+
+    /// <summary>The ghost's irradiance at its brightest field.</summary>
+    public double PeakIrradiance => Peak?.Brightness ?? Irradiance;
 }
