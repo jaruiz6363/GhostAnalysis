@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>GhostAnalysis.Cli</RootNamespace>
+    <AssemblyName>ghost</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GhostAnalysis.Core\GhostAnalysis.Core.csproj" />
+  </ItemGroup>
+
+  <!-- AberrationCalculator's glass catalogs, for reading lenses. -->
+  <ItemGroup>
+    <None Include="..\..\external\AberrationCalculator\catalogs\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="catalogs" />
+  </ItemGroup>
+</Project>

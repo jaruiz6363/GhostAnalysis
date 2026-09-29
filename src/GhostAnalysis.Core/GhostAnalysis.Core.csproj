@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GhostAnalysis.Core</RootNamespace>
+    <AssemblyName>GhostAnalysis.Core</AssemblyName>
+  </PropertyGroup>
+
+  <!-- The optics - lens model, readers for every format, glass, the paraxial trace and the
+       aberration coefficients - are AberrationCalculator's, from the submodule. A ghost is
+       unfolded into a folded lens with two mirrors in it, which AberrationCalculator analyses
+       like any other; GhostAnalysis adds the ghosts: which there are, their layouts, their
+       stops and their light. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\external\AberrationCalculator\src\AberrationCalculator.Core\AberrationCalculator.Core.csproj" />
+    <ProjectReference Include="..\..\external\AberrationCalculator\src\AberrationCalculator.IO\AberrationCalculator.IO.csproj" />
+  </ItemGroup>
+</Project>
