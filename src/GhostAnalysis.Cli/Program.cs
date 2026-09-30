@@ -20,6 +20,8 @@ public static class Program
         "  --sensor-reflectance <R>      the sensor's reflectance (default 0.05)\n" +
         "  --no-sensor                   the sensor does not reflect, as in the papers\n" +
         "  --coated <R>                  every glass-air surface reflects R (default: uncoated Fresnel)\n" +
+        "  --cemented-fresnel            cemented surfaces reflect, Fresnel's value between the glasses\n" +
+        "                                (default: they do not)\n" +
         "  --power <P>                   power entering the lens (default 1)\n" +
         "  --wavelengths <list>          the wavelengths, in micrometres, each with an optional weight:\n" +
         "                                '0.486,0.588,0.656' or '0.486:1,0.588:2,0.656:1', or 'primary'\n" +
@@ -64,7 +66,7 @@ public static class Program
             int reflections = 2;
             double sensor = 0.05, power = 1.0;
             double? coated = null;
-            bool noSensor = false, paraxial = false, aim = true;
+            bool noSensor = false, paraxial = false, aim = true, cementedFresnel = false;
             List<double>? fields = null;
             double extent = 1.2;
             int steps = 12, pupil = 21, detail = 5, layouts = 0;
@@ -93,6 +95,7 @@ public static class Program
                     case "-n": case "--reflections": reflections = int.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--sensor-reflectance": sensor = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--no-sensor": noSensor = true; break;
+                    case "--cemented-fresnel": cementedFresnel = true; break;
                     case "--coated": coated = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--power": power = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--fields":
@@ -162,6 +165,7 @@ public static class Program
                 ImageReflects = !noSensor,
                 ImageReflectance = sensor,
                 CoatedReflectance = coated,
+                CementedReflects = cementedFresnel,
                 InputPower = power,
                 Fields = fields,
                 FieldExtent = extent,

@@ -102,8 +102,11 @@ per unit power entering. A glass-air surface reflects Fresnel's normal-incidence
 
     R = ((n₁ − n₂) / (n₁ + n₂))²,
 
-unless coated (`--coated R`, one value for every glass-air surface). A cemented surface is always
-Fresnel's. The sensor reflects `--sensor-reflectance`.
+unless coated (`--coated R`, one value for every glass-air surface). A cemented surface - glass on
+both sides, a doublet's inner surface - does not reflect: the cement takes up the index step, and
+what is left is too little to count, so no ghost reflects from it. `--cemented-fresnel` gives it
+Fresnel's value between the two glasses instead, as if they touched without cement. The sensor
+reflects `--sensor-reflectance`.
 
 **Paraxially** the power is spread evenly over the ghost's disc ([2], eq. 17): E = P_g / (π y′²).
 **By real rays** (section 7) it is spread over the real spot.

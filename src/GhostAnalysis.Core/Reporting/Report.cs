@@ -42,9 +42,10 @@ public static class Report
         sb.AppendLine(F($"Focal length:      {r.Nominal.Efl:0.######}"));
         sb.AppendLine(F($"Entrance pupil:    {r.Nominal.Epd:0.######}"));
         sb.AppendLine($"Reflections:       {r.Options.Reflections} per ghost");
+        string cemented = r.Options.CementedReflects ? "cemented surfaces Fresnel" : "cemented surfaces do not reflect";
         sb.AppendLine(r.Options.CoatedReflectance is double c
-            ? F($"Surfaces:          coated, R = {c:0.####} at glass-air; cemented surfaces Fresnel")
-            : "Surfaces:          uncoated, Fresnel reflectance at normal incidence");
+            ? F($"Surfaces:          coated, R = {c:0.####} at glass-air; {cemented}")
+            : $"Surfaces:          uncoated, Fresnel reflectance at normal incidence; {cemented}");
         sb.AppendLine(r.Options.ImageReflects
             ? F($"Sensor:            surface {image}, R = {r.Options.ImageReflectance:0.####} (a setting: no lens file gives it)")
             : "Sensor:            not reflecting");

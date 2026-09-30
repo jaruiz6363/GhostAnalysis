@@ -24,10 +24,18 @@ public sealed class GhostOptions
 
     /// <summary>
     /// The reflectance of every glass-air surface, as a fraction, for a coated lens; null for
-    /// uncoated glass, whose reflectance is Fresnel's at normal incidence. A cemented surface is
-    /// always Fresnel's: the index step there is small, and so is what it sends back.
+    /// uncoated glass, whose reflectance is Fresnel's at normal incidence. Cemented surfaces are
+    /// <see cref="CementedReflects"/>'s.
     /// </summary>
     public double? CoatedReflectance { get; init; }
+
+    /// <summary>
+    /// Whether a cemented surface - glass on both sides - reflects. By default it does not: the
+    /// cement between the glasses takes up the index step, and a doublet's inner surface sends
+    /// back too little to count. True gives it Fresnel's reflectance between the two glasses, as if
+    /// they touched without cement.
+    /// </summary>
+    public bool CementedReflects { get; init; }
 
     /// <summary>Power entering the lens's entrance pupil, in whatever unit the irradiances should come out in per lens unit squared.</summary>
     public double InputPower { get; init; } = 1.0;
@@ -74,6 +82,7 @@ public sealed class GhostOptions
         Reflections = Reflections, ImageReflects = ImageReflects, ImageReflectance = ImageReflectance,
         CoatedReflectance = CoatedReflectance, InputPower = InputPower, Fields = Fields, FieldExtent = FieldExtent,
         FieldSteps = FieldSteps, RealRays = RealRays, PupilSamples = PupilSamples, AimRays = AimRays, Sensor = Sensor,
+        CementedReflects = CementedReflects,
         Wavelengths = Wavelengths, Wavelength = um,
     };
 }
@@ -186,7 +195,12 @@ public static class GhostAnalyzer
         double stopSd = lens.Surfaces[stop].SemiDiameter > 0 ? lens.Surfaces[stop].SemiDiameter : Math.Abs(nominal.Y[stop]);
 
         var reflectance = new double[image + 1];
-        for (int k = 1; k < image; k++) reflectance[k] = Reflectance(n[k - 1], n[k], options.CoatedReflectance);
+        // A cemented surface, glass on both sides, reflects nothing unless asked: a ghost that would
+        // reflect from it is then no ghost at all.
+        for (int k = 1; k < image; k++)
+            reflectance[k] = IsCemented(n[k - 1], n[k]) && !options.CementedReflects
+                ? 0.0
+                : Reflectance(n[k - 1], n[k], options.CoatedReflectance);
         reflectance[image] = options.ImageReflects ? options.ImageReflectance : 0.0;
 
         bool infinite = double.IsInfinity(lens.Surfaces[0].Thickness) || Math.Abs(lens.Surfaces[0].Thickness) >= 1e12;
@@ -747,6 +761,14 @@ public static class GhostAnalyzer
         if (coated is double r && airGlass) return r;
         double f = (n1 - n2) / (n1 + n2);
         return f * f;
+    }
+
+    /// <summary>A cemented surface: a real index step, with no air on either side.</summary>
+    public static bool IsCemented(double n1, double n2)
+    {
+        n1 = Math.Abs(n1);
+        n2 = Math.Abs(n2);
+        return Math.Abs(n1 - n2) >= 1e-12 && Math.Abs(n1 - 1.0) >= 1e-3 && Math.Abs(n2 - 1.0) >= 1e-3;
     }
 
     /// <summary>Area common to two discs of radii <paramref name="r1"/> and <paramref name="r2"/> whose centres are <paramref name="d"/> apart.</summary>

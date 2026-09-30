@@ -6,7 +6,39 @@ OSLO, OpTaliX, Optiland, LensHH-LT - and GhostAnalysis finds every ghost it form
 of reflections, the sensor's included, and tells you which are bright, where they land, why, and
 what they look like.
 
-![A ghost that focuses on the sensor off axis](docs/images/short-sensor-G4-3.svg)
+## Built on Abd El-Maksoud and Sasian
+
+GhostAnalysis starts from two papers, and uses much of their mathematics:
+
+1. R. H. Abd El-Maksoud and J. M. Sasian, "Paraxial ghost image analysis," *Proc. SPIE* **7428**,
+   742807 (2009). doi:10.1117/12.828564
+2. R. H. Abd El-Maksoud and J. M. Sasian, "Modeling and analyzing ghost images for incoherent
+   optical systems," *Appl. Opt.* **50**, 2305-2315 (2011).
+
+From them it takes the core of the method: every reflection path unfolded into a ghost lens of its
+own and traced paraxially; the ghost's stop found by the fill-ratio rule; its focal length, back
+focus, pupils, defocus and size at the sensor; its paraxial irradiance; its third-order image
+surfaces; and the ghosts that come into focus on the sensor off axis, where those surfaces cross it.
+The 2009 paper's worked example is reproduced to every printed digit, and is the first check of the
+code ([verification](docs/verification.md)).
+
+What GhostAnalysis adds:
+
+- **The sensor reflects.** The papers' ghosts reflect only from lens surfaces; here the sensor is a
+  reflector too, often the source of the brightest ghosts, and optionally a diffraction grating that
+  splits each of its reflections into orders.
+- **Real rays**, aimed at each ghost's real stop, through every ghost at every field: its real spot,
+  centroid and focus, where the paraxial analysis has only discs.
+- **Real apertures and a real sensor.** Rays are stopped at the edges of the glass and the sensor,
+  sized to the lens's own beam where the file does not say.
+- **The worst field.** Each ghost is followed across the field, past the lens's own edge, and ranked
+  by where it is brightest; the focus crossings are found by real rays as well as predicted.
+- **Colour, drawings, and checking.** Several wavelengths, each ghost drawn in the lens, and each
+  ghost exportable as a lens file, so another program can analyse it independently.
+
+The [method](docs/method.md) gives the equations, and where they come from in the papers.
+
+![A Cooke triplet's ghost G6,1: off the last surface, back off the first, and onto the other side of the sensor](docs/images/cooke-G6-1-14deg.svg)
 
 ## What it does
 
@@ -39,8 +71,10 @@ dotnet run --project src/GhostAnalysis.Cli -- -i examples/Cooke_40deg_FC.zmx --c
 ```
 
 That analyses a Cooke triplet's ghosts at its three wavelengths, prints the report, and writes the
-five brightest as drawings with an HTML page to open. The picture above is
-[example 2](docs/examples.md#2-a-ghost-that-focuses-off-axis).
+five brightest as drawings with an HTML page to open. The picture above is this lens's ghost G6,1
+at 14°: light reflected by the last surface and then the first crosses the lens twice and lands
+on the opposite side of the sensor from the image
+([example 3](docs/examples.md#3-a-cooke-triplet-across-a-36--24-sensor)).
 
 A camera lens, coated, with a real sensor that diffracts:
 

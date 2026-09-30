@@ -79,7 +79,8 @@ reflectance above 1 is refused.
 | `-i`, `--input <file>` | | the lens (required) |
 | `-o`, `--output <file>` | | also write the report to this file |
 | `-n`, `--reflections <n>` | 2 | reflections per ghost: 2, 4, ... Each pair more is weaker by about R². |
-| `--coated <R>` | uncoated | every glass-air surface reflects R; otherwise Fresnel's normal-incidence value. Cemented surfaces are always Fresnel's. |
+| `--coated <R>` | uncoated | every glass-air surface reflects R; otherwise Fresnel's normal-incidence value |
+| `--cemented-fresnel` | | cemented surfaces - a doublet's inner surface - reflect Fresnel's value between the two glasses. By default they do not reflect, and no ghost uses them. |
 | `--sensor-reflectance <R>` | 0.05 | the sensor's reflectance. No lens file gives it; measure or look it up. |
 | `--no-sensor` | | the sensor does not reflect, as in the papers |
 | `--power <P>` | 1 | power entering the lens's pupil; irradiances are per unit of it |
