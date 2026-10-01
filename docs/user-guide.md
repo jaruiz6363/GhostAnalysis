@@ -10,19 +10,18 @@ is computed; the [examples](examples.md) walk through real lenses.
 You need the **.NET 8 SDK** or later ([BUILDING.md](../BUILDING.md) has installers for Windows,
 macOS and Linux).
 
-GhostAnalysis builds on AberrationCalculator, carried as a git submodule, so clone with it:
+GhostAnalysis builds on AberrationCalculator, whose source the repository carries, so a plain clone
+builds:
 
 ```bash
-git clone --recursive https://github.com/jaruiz6363/GhostAnalysis.git
+git clone https://github.com/jaruiz6363/GhostAnalysis.git
 cd GhostAnalysis
 dotnet build
 dotnet test
 ```
 
-If you cloned without `--recursive`, run `git submodule update --init` first.
-
-On Windows, clone to a short path (such as `C:\GIT\GhostAnalysis`): the submodule's build paths are
-deep, and a long starting path can exceed Windows' 260-character limit.
+On Windows, clone to a short path (such as `C:\GIT\GhostAnalysis`): AberrationCalculator's build
+paths are deep, and a long starting path can exceed Windows' 260-character limit.
 
 ### Running it
 

@@ -64,14 +64,11 @@ The [method](docs/method.md) gives the equations, and where they come from in th
 ## Quick start
 
 ```bash
-git clone --recursive https://github.com/jaruiz6363/GhostAnalysis.git
+git clone https://github.com/jaruiz6363/GhostAnalysis.git
 cd GhostAnalysis
 dotnet build
 dotnet run --project src/GhostAnalysis.Cli -- -i examples/Cooke_40deg_FC.zmx --coated 0.005 --layouts
 ```
-
-AberrationCalculator comes in as a git submodule: `--recursive` fetches it with the clone, and if
-you leave that off, the first `dotnet build` fetches it for you.
 
 That analyses a Cooke triplet's ghosts at its three wavelengths, prints the report, and writes the
 five brightest as drawings with an HTML page to open. The picture above is this lens's ghost G6,1

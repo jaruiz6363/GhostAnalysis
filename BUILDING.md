@@ -76,26 +76,18 @@ You should see version 8.0.x or higher.
 ### Clone the Repository
 
 GhostAnalysis builds on [AberrationCalculator](https://github.com/jaruiz6363/AberrationCalculator),
-which it carries as a git submodule in `external/AberrationCalculator`. Clone with the submodule:
+which it carries in `external/AberrationCalculator` as a copy of its source. A plain clone has
+everything; there is nothing else to fetch:
 
 ```bash
-git clone --recursive https://github.com/jaruiz6363/GhostAnalysis.git
+git clone https://github.com/jaruiz6363/GhostAnalysis.git
 cd GhostAnalysis
 ```
 
-If you cloned without `--recursive`, the build fetches the submodule itself: the first
-`dotnet build`, `dotnet test` or `dotnet run` runs `git submodule update --init` when
-`external/AberrationCalculator` is empty (see `build/Submodules.targets`). You can also run that
-command yourself. A ZIP download from GitHub has no submodules and is not a git checkout, so it
-cannot be fetched this way; clone the repository instead.
-
-The submodule is pinned to a known AberrationCalculator commit. To move it to a newer one:
+The copy is a `git subtree` of a known AberrationCalculator commit. To move it to a newer one:
 
 ```bash
-cd external/AberrationCalculator
-git pull origin main
-cd ../..
-git add external/AberrationCalculator
+git subtree pull --prefix=external/AberrationCalculator https://github.com/jaruiz6363/AberrationCalculator.git main --squash
 ```
 
 ### Restore Dependencies

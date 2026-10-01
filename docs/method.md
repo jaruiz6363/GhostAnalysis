@@ -12,7 +12,7 @@ diffraction, several wavelengths, and drawings.
 
 All the optics underneath - the lens model, the file readers, the glass catalogs, the paraxial
 and real-ray traces, the Seidel sums - are [AberrationCalculator](https://github.com/jaruiz6363/AberrationCalculator)'s,
-carried as a git submodule.
+carried in `external/AberrationCalculator` as a `git subtree`.
 
 Units are the lens's (millimetres); wavelengths and grating periods are in micrometres;
 reflectances and efficiencies are fractions (0.1 is 10 %).
