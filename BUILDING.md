@@ -83,11 +83,11 @@ git clone --recursive https://github.com/jaruiz6363/GhostAnalysis.git
 cd GhostAnalysis
 ```
 
-If you cloned without `--recursive`, fetch it afterwards:
-
-```bash
-git submodule update --init
-```
+If you cloned without `--recursive`, the build fetches the submodule itself: the first
+`dotnet build`, `dotnet test` or `dotnet run` runs `git submodule update --init` when
+`external/AberrationCalculator` is empty (see `build/Submodules.targets`). You can also run that
+command yourself. A ZIP download from GitHub has no submodules and is not a git checkout, so it
+cannot be fetched this way; clone the repository instead.
 
 The submodule is pinned to a known AberrationCalculator commit. To move it to a newer one:
 

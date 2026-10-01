@@ -1,0 +1,5 @@
+<Project>
+  <!-- Imported by MSBuild into the solution build: fetches the AberrationCalculator submodule
+       on `dotnet build` / `dotnet test` when the clone was not recursive. -->
+  <Import Project="build\Submodules.targets" />
+</Project>

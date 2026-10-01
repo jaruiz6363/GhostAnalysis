@@ -1,0 +1,4 @@
+<Project>
+  <!-- Stops MSBuild's upward search here, so GhostAnalysis's Directory.Build.targets does not
+       reach the AberrationCalculator submodule. -->
+</Project>
