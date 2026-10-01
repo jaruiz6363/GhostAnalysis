@@ -1,4 +1,0 @@
-<Project>
-  <!-- Same for building or running a single project, e.g. dotnet run on GhostAnalysis.Cli. -->
-  <Import Project="build\Submodules.targets" />
-</Project>
