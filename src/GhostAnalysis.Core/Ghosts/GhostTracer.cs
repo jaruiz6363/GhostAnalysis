@@ -32,17 +32,12 @@ public sealed class GhostTracer
     private readonly Sensor? _sensor;
     private readonly Segment[] _segments;
 
-    /// <summary>
-    /// How the rays are aimed at one field: the launch point of the ray through the stop's centre,
-    /// and the inverse of the Jacobian there - launch point against where the ray crosses the stop -
-    /// the start of every other ray's search.
-    /// </summary>
-    private sealed record Aim(double Y0, double X0, double Iyy, double Iyx, double Ixy, double Ixx);
-
     // The paraxial marginal ray's height at the ghost's stop, signed: a pupil coordinate of 1 is a
     // ray through the stop there. 0 when the rays are not aimed.
     private readonly double _stopHeight;
-    private readonly ConcurrentDictionary<double, Aim?> _aims = new();
+    // AberrationCalculator's ray aiming, carrying rays to the stop by StopHit; null when the rays
+    // are not aimed.
+    private readonly StopAimer? _aimer;
     private readonly ConcurrentDictionary<double, double> _areas = new();
     // The ghost as far as its stop, where the search for an aimed ray traces it; null to trace it all.
     private readonly OpticalSystem? _toStop;
@@ -85,6 +80,8 @@ public sealed class GhostTracer
             _toStop = new OpticalSystem { FieldType = layout.FieldType, Surfaces = surfaces };
             _toStopN = n.Take(ghostStop + 1).Append(n[ghostStop]).ToArray();
         }
+
+        if (_stopHeight != 0.0) _aimer = new StopAimer(StopHit, _stopHeight);
     }
 
     /// <summary>A tracer that neither clips nor diffracts: the ghost's rays as they go.</summary>
@@ -181,86 +178,14 @@ public sealed class GhostTracer
 
     /// <summary>
     /// Where in the paraxial entrance pupil to launch the ray that crosses the ghost's stop at
-    /// (<paramref name="px"/>, <paramref name="py"/>) times the paraxial marginal ray's height there:
-    /// Newton's method, from the chief ray's Jacobian, taking a fresh one where that converges slowly.
-    /// Null where no ray gets there.
+    /// (<paramref name="px"/>, <paramref name="py"/>) times the paraxial marginal ray's height there,
+    /// by AberrationCalculator's <see cref="StopAimer"/>. Null where no ray gets there; launched
+    /// paraxially where no ray reaches even the stop's centre.
     /// </summary>
     private (double Y, double X)? Aimed(double field, double py, double px)
     {
-        var aim = _aims.GetOrAdd(field, AimAt);
-        if (aim == null) return (py, px);            // the stop's centre out of reach: launched paraxially
-        double ty = py * _stopHeight, tx = px * _stopHeight;
-        double ly = aim.Y0 + aim.Iyy * ty + aim.Iyx * tx;
-        double lx = aim.X0 + aim.Ixy * ty + aim.Ixx * tx;
-        return Solve(field, ty, tx, ly, lx, aim);
-    }
-
-    /// <summary>The chief ray's launch point at one field, and the Jacobian there; null if no ray reaches the stop's centre.</summary>
-    private Aim? AimAt(double field)
-    {
-        var start = Jacobian(field, 0.0, 0.0);
-        if (start == null) return null;
-        var chief = Solve(field, 0.0, 0.0, 0.0, 0.0, start);
-        if (chief is not (double y0, double x0)) return null;
-        var j = Jacobian(field, y0, x0);
-        return j == null ? null : j with { Y0 = y0, X0 = x0 };
-    }
-
-    /// <summary>
-    /// The launch point whose ray crosses the stop at (tx, ty), from (lx, ly): Broyden's method,
-    /// its inverse Jacobian that of <paramref name="j"/> to start with and bettered by each step,
-    /// one trace a step; a fresh one taken by differences if it stalls. To a billionth of the stop's radius.
-    /// </summary>
-    private (double Y, double X)? Solve(double field, double ty, double tx, double ly, double lx, Aim j)
-    {
-        double tolerance = 1e-9 * Math.Abs(_stopHeight);
-        double hyy = j.Iyy, hyx = j.Iyx, hxy = j.Ixy, hxx = j.Ixx;
-        double last = double.PositiveInfinity, fy = 0, fx = 0, dy = 0, dx = 0;
-        for (int k = 0; k < 40; k++)
-        {
-            if (StopHit(field, ly, lx) is not (double sy, double sx)) return null;
-            double ry = sy - ty, rx = sx - tx;
-            double r = Math.Sqrt(ry * ry + rx * rx);
-            if (r <= tolerance) return (ly, lx);
-            if (r > 0.5 * last && Jacobian(field, ly, lx) is { } fresh)
-            {
-                (hyy, hyx, hxy, hxx) = (fresh.Iyy, fresh.Iyx, fresh.Ixy, fresh.Ixx);
-            }
-            else if (k > 0)
-            {
-                // Broyden's good update of the inverse: H += (Δx - H Δf) (Δxᵀ H) / (Δxᵀ H Δf).
-                double gy = ry - fy, gx = rx - fx;                              // Δf
-                double hgy = hyy * gy + hyx * gx, hgx = hxy * gy + hxx * gx;    // H Δf
-                double denom = dy * hgy + dx * hgx;
-                if (Math.Abs(denom) > 1e-300)
-                {
-                    double uy = (dy - hgy) / denom, ux = (dx - hgx) / denom;
-                    double vy = dy * hyy + dx * hxy, vx = dy * hyx + dx * hxx;  // Δxᵀ H
-                    hyy += uy * vy; hyx += uy * vx; hxy += ux * vy; hxx += ux * vx;
-                }
-            }
-            last = r;
-            fy = ry; fx = rx;
-            dy = -(hyy * ry + hyx * rx);
-            dx = -(hxy * ry + hxx * rx);
-            ly += dy;
-            lx += dx;
-        }
-        return null;
-    }
-
-    /// <summary>The inverse Jacobian at one launch point, by central differences; null where it cannot be taken.</summary>
-    private Aim? Jacobian(double field, double ly, double lx)
-    {
-        const double d = 1e-5;
-        if (StopHit(field, ly + d, lx) is not (double y1, double x1) || StopHit(field, ly - d, lx) is not (double y2, double x2) ||
-            StopHit(field, ly, lx + d) is not (double y3, double x3) || StopHit(field, ly, lx - d) is not (double y4, double x4))
-            return null;
-        double a = (y1 - y2) / (2 * d), c = (x1 - x2) / (2 * d);      // d(stop y, stop x) / d(launch y)
-        double b = (y3 - y4) / (2 * d), e = (x3 - x4) / (2 * d);      // d(stop y, stop x) / d(launch x)
-        double det = a * e - b * c;
-        if (!double.IsFinite(det) || Math.Abs(det) < 1e-300) return null;
-        return new Aim(ly, lx, e / det, -b / det, -c / det, a / det);
+        if (!_aimer!.CanAim(field)) return (py, px);   // the stop's centre out of reach: launched paraxially
+        return _aimer.Launch(field, py, px);
     }
 
     /// <summary>
@@ -270,9 +195,8 @@ public sealed class GhostTracer
     /// </summary>
     private RealRayTrace.SurfaceHit? Beside(double field, double py, double px)
     {
-        if (_stopHeight == 0.0 || _aims.GetOrAdd(field, AimAt) is not { } aim) return Launch(field, py, px, false, null);
-        double ty = py * _stopHeight, tx = px * _stopHeight;
-        return Launch(field, aim.Y0 + aim.Iyy * ty + aim.Iyx * tx, aim.X0 + aim.Ixy * ty + aim.Ixx * tx, false, null);
+        if (_aimer?.Predict(field, py, px) is not (double ly, double lx)) return Launch(field, py, px, false, null);
+        return Launch(field, ly, lx, false, null);
     }
 
     /// <summary>Where a ray launched at (lx, ly) crosses the ghost's stop, in the stop's own frame; null if it does not.</summary>

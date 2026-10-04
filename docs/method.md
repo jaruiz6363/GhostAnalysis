@@ -136,7 +136,8 @@ the sensor's edge. The ghost's own stop is not checked: the pupil grid is what f
 **Ray aiming.** Each ray is aimed at the stop: launched from the point of the paraxial entrance
 pupil whose real ray crosses the ghost's stop at the grid's point, times the paraxial marginal ray's
 height there - found by Broyden's method from the chief ray's Jacobian, to a billionth of the stop's
-radius. The paraxial pupil itself is not the real one: a fast lens's pupil aberrations make it
+radius, by AberrationCalculator's `StopAimer` (written here first, and moved there so other programs
+share it). The paraxial pupil itself is not the real one: a fast lens's pupil aberrations make it
 overfill the stop (US 8,264,785's Example 4, at F/1.6, stops an axial ray at 0.97 of it), and at
 a wide field a ray launched at its centre can miss the stop's centre by much more. The real
 pupil's area, from 32 aimed rays around its rim, against the paraxial pupil's, is the light the stop
